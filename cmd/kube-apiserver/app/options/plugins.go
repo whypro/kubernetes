@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/plugin/pkg/admission/admit"
 	"k8s.io/kubernetes/plugin/pkg/admission/alwayspullimages"
 	"k8s.io/kubernetes/plugin/pkg/admission/antiaffinity"
+	"k8s.io/kubernetes/plugin/pkg/admission/decorategpupod"
 	"k8s.io/kubernetes/plugin/pkg/admission/defaulttolerationseconds"
 	"k8s.io/kubernetes/plugin/pkg/admission/deny"
 	"k8s.io/kubernetes/plugin/pkg/admission/eventratelimit"
@@ -83,4 +84,5 @@ func RegisterAllAdmissionPlugins(plugins *admission.Plugins) {
 	setdefault.Register(plugins)
 	webhook.Register(plugins)
 	resize.Register(plugins)
+	decorategpupod.Register(plugins)
 }
