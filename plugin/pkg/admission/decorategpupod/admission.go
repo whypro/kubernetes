@@ -17,13 +17,15 @@ limitations under the License.
 package decorategpupod
 
 import (
-	// "fmt"
 	"io"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/kubernetes/pkg/api"
-	// kubeletapis "k8s.io/kubernetes/pkg/kubelet/apis"
 	"github.com/golang/glog"
+)
+
+const (
+	defaultTolerationSeconds int64 = 3600	// 1 hour
 )
 
 // Register registers a plugin
@@ -123,7 +125,7 @@ func (p *plugin) Admit(a admission.Attributes) (err error) {
 		return apierrors.NewBadRequest("Resource was marked with kind Pod but was unable to be converted")
 	}
 
-	tolerationSeconds := int64(3600)	// 1 hour
+	tolerationSeconds := defaultTolerationSeconds
 	toleration := api.Toleration{
 		Key: "dedicated",
 		Operator: api.TolerationOpEqual,
