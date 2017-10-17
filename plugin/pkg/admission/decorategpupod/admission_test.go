@@ -26,8 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-
-
 func getPod(name string, numContainers int, needGPU bool) *api.Pod {
 	res := api.ResourceRequirements{}
 	if needGPU {
@@ -51,13 +49,11 @@ func getPod(name string, numContainers int, needGPU bool) *api.Pod {
 }
 
 func getToleration() *api.Toleration {
-	tolerationSeconds := int64(3600)
 	toleration := &api.Toleration{
-	Key: "dedicated",
-	Operator: api.TolerationOpEqual,
-	Value: "gpu",
-	Effect: api.TaintEffectNoExecute,
-	TolerationSeconds: &tolerationSeconds,
+		Key: "dedicated",
+		Operator: api.TolerationOpEqual,
+		Value: "gpu",
+		Effect: api.TaintEffectNoSchedule,
 	}
 	return toleration
 }

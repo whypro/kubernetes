@@ -24,10 +24,6 @@ import (
 	"github.com/golang/glog"
 )
 
-const (
-	defaultTolerationSeconds int64 = 3600	// 1 hour
-)
-
 func init() {
 	admission.RegisterPlugin("DecorateGPUPod", func(config io.Reader) (admission.Interface, error) {
 		return NewDecorateGPUPodPlugin(), nil
@@ -124,13 +120,11 @@ func (p *plugin) Admit(a admission.Attributes) (err error) {
 		return apierrors.NewBadRequest("Resource was marked with kind Pod but was unable to be converted")
 	}
 
-	tolerationSeconds := defaultTolerationSeconds
 	toleration := api.Toleration{
 		Key: "dedicated",
 		Operator: api.TolerationOpEqual,
 		Value: "gpu",
-		Effect: api.TaintEffectNoExecute,
-		TolerationSeconds: &tolerationSeconds,
+		Effect: api.TaintEffectNoSchedule,
 	}
 
 	if !checkNeedGPU(pod) {
