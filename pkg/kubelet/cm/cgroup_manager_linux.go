@@ -316,6 +316,9 @@ func getSupportedSubsystems() []subsystem {
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.HugePages) {
 		supportedSubsystems = append(supportedSubsystems, &cgroupfs.HugetlbGroup{})
 	}
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.SupportPodPidsLimit) {
+		supportedSubsystems = append(supportedSubsystems, &cgroupfs.PidsGroup{})
+	}
 	return supportedSubsystems
 }
 
@@ -418,6 +421,10 @@ func (m *cgroupManagerImpl) Update(cgroupConfig *CgroupConfig) error {
 		Paths:     cgroupPaths,
 	}
 
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.SupportPodPidsLimit) && cgroupConfig.ResourceParameters.PodPidsLimit != nil {
+		libcontainerCgroupConfig.PidsLimit = *cgroupConfig.ResourceParameters.PodPidsLimit
+	}
+
 	if err := setSupportedSubsystems(libcontainerCgroupConfig); err != nil {
 		return fmt.Errorf("failed to set supported cgroup subsystems for cgroup %v: %v", cgroupConfig.Name, err)
 	}
@@ -449,6 +456,10 @@ func (m *cgroupManagerImpl) Create(cgroupConfig *CgroupConfig) error {
 		Name:      driverName,
 		Parent:    driverParent,
 		Resources: resources,
+	}
+
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.SupportPodPidsLimit) && cgroupConfig.ResourceParameters.PodPidsLimit != nil {
+		libcontainerCgroupConfig.PidsLimit = *cgroupConfig.ResourceParameters.PodPidsLimit
 	}
 
 	// get the manager with the specified cgroup configuration
