@@ -221,6 +221,11 @@ func DeepCopy_componentconfig_KubeletConfiguration(in interface{}, out interface
 			*out = make([]string, len(*in))
 			copy(*out, *in)
 		}
+		if in.PodPidsLimit != nil {
+			in, out := &in.PodPidsLimit, &out.PodPidsLimit
+			*out = new(int64)
+			**out = **in
+		}
 		if in.RegisterWithTaints != nil {
 			in, out := &in.RegisterWithTaints, &out.RegisterWithTaints
 			*out = make([]api.Taint, len(*in))

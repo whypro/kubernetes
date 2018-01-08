@@ -283,6 +283,7 @@ func (cm *containerManagerImpl) NewPodContainerManager() PodContainerManager {
 			subsystems:               cm.subsystems,
 			cgroupManager:            cm.cgroupManager,
 			cpuOvercommitRatioGetter: cm.cpuOvercommitRatioGetter,
+			podPidsLimit:             cm.ExperimentalPodPidsLimit,
 		}
 	}
 	return &podContainerManagerNoop{
