@@ -302,10 +302,11 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 func (cm *containerManagerImpl) NewPodContainerManager() PodContainerManager {
 	if cm.NodeConfig.CgroupsPerQOS {
 		return &podContainerManagerImpl{
-			qosContainersInfo: cm.GetQOSContainersInfo(),
-			subsystems:        cm.subsystems,
-			cgroupManager:     cm.cgroupManager,
+			qosContainersInfo:        cm.GetQOSContainersInfo(),
+			subsystems:               cm.subsystems,
+			cgroupManager:            cm.cgroupManager,
 			cpuOvercommitRatioGetter: cm.cpuOvercommitRatioGetter,
+			podPidsLimit:             cm.ExperimentalPodPidsLimit,
 		}
 	}
 	return &podContainerManagerNoop{
