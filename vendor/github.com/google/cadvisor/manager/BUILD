@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//vendor/github.com/docker/go-units:go_default_library",
         "//vendor/github.com/golang/glog:go_default_library",
+        "//vendor/github.com/google/cadvisor/accelerators:go_default_library",
         "//vendor/github.com/google/cadvisor/cache/memory:go_default_library",
         "//vendor/github.com/google/cadvisor/collector:go_default_library",
         "//vendor/github.com/google/cadvisor/container:go_default_library",
@@ -26,6 +27,7 @@ go_library(
         "//vendor/github.com/google/cadvisor/container/systemd:go_default_library",
         "//vendor/github.com/google/cadvisor/events:go_default_library",
         "//vendor/github.com/google/cadvisor/fs:go_default_library",
+        "//vendor/github.com/google/cadvisor/gpu:go_default_library",
         "//vendor/github.com/google/cadvisor/info/v1:go_default_library",
         "//vendor/github.com/google/cadvisor/info/v2:go_default_library",
         "//vendor/github.com/google/cadvisor/machine:go_default_library",

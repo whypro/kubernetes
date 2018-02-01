@@ -9,13 +9,9 @@ load(
 
 go_library(
     name = "go_default_library",
-    srcs = ["metrics.go"],
+    srcs = ["gpu.go"],
     tags = ["automanaged"],
-    deps = [
-        "//pkg/kubelet/container:go_default_library",
-        "//vendor/github.com/golang/glog:go_default_library",
-        "//vendor/github.com/prometheus/client_golang/prometheus:go_default_library",
-    ],
+    deps = ["//vendor/github.com/google/cadvisor/gpu/cmd:go_default_library"],
 )
 
 filegroup(
@@ -29,7 +25,7 @@ filegroup(
     name = "all-srcs",
     srcs = [
         ":package-srcs",
-        "//pkg/kubelet/metrics/collectors:all-srcs",
+        "//vendor/github.com/google/cadvisor/gpu/cmd:all-srcs",
     ],
     tags = ["automanaged"],
 )

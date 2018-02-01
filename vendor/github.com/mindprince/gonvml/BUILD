@@ -4,18 +4,30 @@ licenses(["notice"])
 
 load(
     "@io_bazel_rules_go//go:def.bzl",
+    "cgo_genrule",
     "go_library",
+)
+
+cgo_genrule(
+    name = "cgo_codegen",
+    srcs = [
+        "bindings.go",
+        "nvml.h",
+    ],
+    clinkopts = [
+        "-lz",
+        "-lm",
+        "-lpthread",
+        "-ldl",
+    ],
+    tags = ["automanaged"],
 )
 
 go_library(
     name = "go_default_library",
-    srcs = ["metrics.go"],
+    srcs = [],
+    library = ":cgo_codegen",
     tags = ["automanaged"],
-    deps = [
-        "//pkg/kubelet/container:go_default_library",
-        "//vendor/github.com/golang/glog:go_default_library",
-        "//vendor/github.com/prometheus/client_golang/prometheus:go_default_library",
-    ],
 )
 
 filegroup(
@@ -27,9 +39,6 @@ filegroup(
 
 filegroup(
     name = "all-srcs",
-    srcs = [
-        ":package-srcs",
-        "//pkg/kubelet/metrics/collectors:all-srcs",
-    ],
+    srcs = [":package-srcs"],
     tags = ["automanaged"],
 )
