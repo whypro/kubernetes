@@ -117,8 +117,8 @@ func identityMatches(set *apps.StatefulSet, pod *v1.Pod) bool {
 		set.Name == parent &&
 		pod.Name == getPodName(set, ordinal) &&
 		pod.Namespace == set.Namespace &&
-		pod.Spec.Hostname == pod.Name &&
-		pod.Spec.Subdomain == set.Spec.ServiceName
+		pod.Spec.Hostname != "" &&
+		(pod.Spec.Subdomain != "" || set.Spec.ServiceName == "")
 }
 
 // storageMatches returns true if pod's Volumes cover the set of PersistentVolumeClaims
@@ -186,12 +186,23 @@ func updateStorage(set *apps.StatefulSet, pod *v1.Pod) {
 	pod.Spec.Volumes = newVolumes
 }
 
+func initIdentity(set *apps.StatefulSet, pod *v1.Pod) {
+	updateIdentity(set, pod)
+	// Set these immutable fields only on initial Pod creation, not updates.
+	pod.Spec.Hostname = pod.Name
+	pod.Spec.Subdomain = set.Spec.ServiceName
+}
+
 // updateIdentity updates pod's name, hostname, and subdomain to conform to set's name and headless service.
 func updateIdentity(set *apps.StatefulSet, pod *v1.Pod) {
 	pod.Name = getPodName(set, getOrdinal(pod))
 	pod.Namespace = set.Namespace
-	pod.Spec.Hostname = pod.Name
-	pod.Spec.Subdomain = set.Spec.ServiceName
+	if pod.Spec.Hostname == "" {
+		pod.Spec.Hostname = pod.Name
+	}
+	if pod.Spec.Subdomain == "" {
+		pod.Spec.Subdomain = set.Spec.ServiceName
+	}
 }
 
 // isRunningAndReady returns true if pod is in the PodRunning Phase, if it has a condition of PodReady, and if the init
@@ -276,7 +287,7 @@ func getPodRevision(pod *v1.Pod) string {
 func newStatefulSetPod(set *apps.StatefulSet, ordinal int) *v1.Pod {
 	pod, _ := controller.GetPodFromTemplate(&set.Spec.Template, set, newControllerRef(set))
 	pod.Name = getPodName(set, ordinal)
-	updateIdentity(set, pod)
+	initIdentity(set, pod)
 	updateStorage(set, pod)
 	return pod
 }

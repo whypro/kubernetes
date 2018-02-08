@@ -25,6 +25,12 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# Use --retry-connrefused opt only if it's supported by curl.
+CURL_RETRY_CONNREFUSED=""
+if curl --help | grep -q -- '--retry-connrefused'; then
+  CURL_RETRY_CONNREFUSED='--retry-connrefused'
+fi
+
 function setup-os-params {
   # Reset core_pattern. On GCI, the default core_pattern pipes the core dumps to
   # /sbin/crash_reporter which is more restrictive in saving crash dumps. So for
@@ -32,77 +38,42 @@ function setup-os-params {
   echo "core.%e.%p.%t" > /proc/sys/kernel/core_pattern
 }
 
-# Vars assumed:
-#   NUM_NODES
-function get-calico-node-cpu {
-  local suggested_calico_cpus=100m
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    suggested_calico_cpus=250m
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    suggested_calico_cpus=500m
-  fi
-  if [[ "${NUM_NODES}" -gt "500" ]]; then
-    suggested_calico_cpus=1000m
-  fi
-  echo "${suggested_calico_cpus}"
-}
-
-# Vars assumed:
-#    NUM_NODES
-function get-calico-typha-replicas {
-  local typha_count=1
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    typha_count=2
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    typha_count=3
-  fi
-  if [[ "${NUM_NODES}" -gt "250" ]]; then
-    typha_count=4
-  fi
-  if [[ "${NUM_NODES}" -gt "500" ]]; then
-    typha_count=5
-  fi
-  echo "${typha_count}"
-}
-
-# Vars assumed:
-#    NUM_NODES
-function get-calico-typha-cpu {
-  local typha_cpu=200m
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    typha_cpu=500m
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    typha_cpu=1000m
-  fi
-  echo "${typha_cpu}"
-}
-
-
 function config-ip-firewall {
   echo "Configuring IP firewall rules"
   # The GCI image has host firewall which drop most inbound/forwarded packets.
   # We need to add rules to accept all TCP/UDP/ICMP packets.
-  if iptables -L INPUT | grep "Chain INPUT (policy DROP)" > /dev/null; then
+  if iptables -w -L INPUT | grep "Chain INPUT (policy DROP)" > /dev/null; then
     echo "Add rules to accept all inbound TCP/UDP/ICMP packets"
     iptables -A INPUT -w -p TCP -j ACCEPT
     iptables -A INPUT -w -p UDP -j ACCEPT
     iptables -A INPUT -w -p ICMP -j ACCEPT
   fi
-  if iptables -L FORWARD | grep "Chain FORWARD (policy DROP)" > /dev/null; then
+  if iptables -w -L FORWARD | grep "Chain FORWARD (policy DROP)" > /dev/null; then
     echo "Add rules to accept all forwarded TCP/UDP/ICMP packets"
     iptables -A FORWARD -w -p TCP -j ACCEPT
     iptables -A FORWARD -w -p UDP -j ACCEPT
     iptables -A FORWARD -w -p ICMP -j ACCEPT
   fi
 
-  iptables -N KUBE-METADATA-SERVER
-  iptables -I FORWARD -p tcp -d 169.254.169.254 --dport 80 -j KUBE-METADATA-SERVER
+  iptables -w -N KUBE-METADATA-SERVER
+  iptables -w -I FORWARD -p tcp -d 169.254.169.254 --dport 80 -j KUBE-METADATA-SERVER
 
   if [[ -n "${KUBE_FIREWALL_METADATA_SERVER:-}" ]]; then
-    iptables -A KUBE-METADATA-SERVER -j DROP
+    iptables -w -A KUBE-METADATA-SERVER -j DROP
+  fi
+
+  # Flush iptables nat table
+  iptables -w -t nat -F || true
+
+  echo "Add rules for ip masquerade"
+  if [[ "${NON_MASQUERADE_CIDR:-}" == "0.0.0.0/0" ]]; then
+    iptables -w -t nat -N IP-MASQ
+    iptables -w -t nat -A POSTROUTING -m comment --comment "ip-masq: ensure nat POSTROUTING directs all non-LOCAL destination traffic to our custom IP-MASQ chain" -m addrtype ! --dst-type LOCAL -j IP-MASQ
+    iptables -w -t nat -A IP-MASQ -d 169.254.0.0/16 -m comment --comment "ip-masq: local traffic is not subject to MASQUERADE" -j RETURN
+    iptables -w -t nat -A IP-MASQ -d 10.0.0.0/8 -m comment --comment "ip-masq: local traffic is not subject to MASQUERADE" -j RETURN
+    iptables -w -t nat -A IP-MASQ -d 172.16.0.0/12 -m comment --comment "ip-masq: local traffic is not subject to MASQUERADE" -j RETURN
+    iptables -w -t nat -A IP-MASQ -d 192.168.0.0/16 -m comment --comment "ip-masq: local traffic is not subject to MASQUERADE" -j RETURN
+    iptables -w -t nat -A IP-MASQ -m comment --comment "ip-masq: outbound traffic is subject to MASQUERADE (must be last in chain)" -j MASQUERADE
   fi
 }
 
@@ -789,26 +760,37 @@ function assemble-docker-flags {
   docker_opts+=" --log-opt=max-size=${DOCKER_LOG_MAX_SIZE:-10m}"
   docker_opts+=" --log-opt=max-file=${DOCKER_LOG_MAX_FILE:-5}"
 
+  # Disable live-restore if the environment variable is set.
+  if [[ "${DISABLE_DOCKER_LIVE_RESTORE:-false}" == "true" ]]; then
+    docker_opts+=" --live-restore=false"
+  fi
+
   echo "DOCKER_OPTS=\"${docker_opts} ${EXTRA_DOCKER_OPTS:-}\"" > /etc/default/docker
 
   if [[ "${use_net_plugin}" == "true" ]]; then
     # If using a network plugin, extend the docker configuration to always remove
     # the network checkpoint to avoid corrupt checkpoints.
     # (https://github.com/docker/docker/issues/18283).
-    echo "Extend the default docker.service configuration"
+    echo "Extend the docker.service configuration to remove the network checkpiont"
     mkdir -p /etc/systemd/system/docker.service.d
     cat <<EOF >/etc/systemd/system/docker.service.d/01network.conf
 [Service]
 ExecStartPre=/bin/sh -x -c "rm -rf /var/lib/docker/network"
 EOF
+  fi
+
+  # Ensure TasksMax is sufficient for docker.
+  # (https://github.com/kubernetes/kubernetes/issues/51977)
+  echo "Extend the docker.service configuration to set a higher pids limit"
+  mkdir -p /etc/systemd/system/docker.service.d
+  cat <<EOF >/etc/systemd/system/docker.service.d/02tasksmax.conf
+[Service]
+TasksMax=infinity
+EOF
 
     systemctl daemon-reload
-
-    # If using a network plugin, we need to explicitly restart docker daemon, because
-    # kubelet will not do it.
     echo "Docker command line is updated. Restart docker to pick it up"
     systemctl restart docker
-  fi
 }
 
 # A helper function for loading a docker image. It keeps trying up to 5 times.
@@ -976,9 +958,6 @@ ExecStart=${kubelet_bin} \$KUBELET_OPTS
 WantedBy=multi-user.target
 EOF
 
-  # Flush iptables nat table
-  iptables -t nat -F || true
-
   systemctl start kubelet.service
 }
 
@@ -1072,7 +1051,7 @@ function start-kube-proxy {
 # $4: value for variable 'cpulimit'
 # $5: pod name, which should be either etcd or etcd-events
 function prepare-etcd-manifest {
-  local host_name=$(hostname)
+  local host_name=${ETCD_HOSTNAME:-$(hostname -s)}
   local etcd_cluster=""
   local cluster_state="new"
   local etcd_protocol="http"
@@ -1261,6 +1240,9 @@ function start-kube-apiserver {
   if [[ -n "${STORAGE_MEDIA_TYPE:-}" ]]; then
     params+=" --storage-media-type=${STORAGE_MEDIA_TYPE}"
   fi
+  if [[ -n "${KUBE_APISERVER_REQUEST_TIMEOUT_SEC:-}" ]]; then
+    params+=" --request-timeout=${KUBE_APISERVER_REQUEST_TIMEOUT_SEC}s"
+  fi
   if [[ -n "${ENABLE_GARBAGE_COLLECTOR:-}" ]]; then
     params+=" --enable-garbage-collector=${ENABLE_GARBAGE_COLLECTOR}"
   fi
@@ -1361,7 +1343,7 @@ function start-kube-apiserver {
     params+=" --feature-gates=${FEATURE_GATES}"
   fi
   if [[ -n "${PROJECT_ID:-}" && -n "${TOKEN_URL:-}" && -n "${TOKEN_BODY:-}" && -n "${NODE_NETWORK:-}" ]]; then
-    local -r vm_external_ip=$(curl --retry 5 --retry-delay 3 --fail --silent -H 'Metadata-Flavor: Google' "http://metadata/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip")
+    local -r vm_external_ip=$(curl --retry 5 --retry-delay 3 ${CURL_RETRY_CONNREFUSED} --fail --silent -H 'Metadata-Flavor: Google' "http://metadata/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip")
     params+=" --advertise-address=${vm_external_ip}"
     params+=" --ssh-user=${PROXY_SSH_USER}"
     params+=" --ssh-keyfile=/etc/srv/sshproxy/.sshkeyfile"
@@ -1572,7 +1554,7 @@ function start-cluster-autoscaler {
     local -r src_file="${KUBE_HOME}/kube-manifests/kubernetes/gci-trusty/cluster-autoscaler.manifest"
     remove-salt-config-comments "${src_file}"
 
-    local params="${AUTOSCALER_MIG_CONFIG} ${CLOUD_CONFIG_OPT} ${AUTOSCALER_EXPANDER_CONFIG:-}"
+    local params="${AUTOSCALER_MIG_CONFIG} ${CLOUD_CONFIG_OPT} ${AUTOSCALER_EXPANDER_CONFIG:---expander=price}"
     sed -i -e "s@{{params}}@${params}@g" "${src_file}"
     sed -i -e "s@{{cloud_config_mount}}@${CLOUD_CONFIG_MOUNT}@g" "${src_file}"
     sed -i -e "s@{{cloud_config_volume}}@${CLOUD_CONFIG_VOLUME}@g" "${src_file}"
@@ -1608,6 +1590,26 @@ function setup-addon-manifests {
   chown -R root:root "${dst_dir}"
   chmod 755 "${dst_dir}"
   chmod 644 "${dst_dir}"/*
+}
+
+# Fluentd manifest is modified using kubectl, which may not be available at
+# this point. Run this as a background process.
+function wait-for-apiserver-and-update-fluentd {
+  until kubectl get nodes
+  do
+    sleep 10
+  done
+  kubectl set resources --dry-run --local -f ${fluentd_gcp_yaml} \
+    --limits=memory=${FLUENTD_GCP_MEMORY_LIMIT} \
+    --requests=cpu=${FLUENTD_GCP_CPU_REQUEST},memory=${FLUENTD_GCP_MEMORY_REQUEST} \
+    --containers=fluentd-gcp -o yaml > ${fluentd_gcp_yaml}.tmp
+  mv ${fluentd_gcp_yaml}.tmp ${fluentd_gcp_yaml}
+}
+
+# Trigger background process that will ultimately update fluentd resource
+# requirements.
+function start-fluentd-resource-update {
+  wait-for-apiserver-and-update-fluentd &
 }
 
 # Prepares the manifests of k8s addons, and starts the addon manager.
@@ -1693,6 +1695,8 @@ function start-kube-addons {
   if [[ "${ENABLE_NODE_LOGGING:-}" == "true" ]] && \
      [[ "${LOGGING_DESTINATION:-}" == "gcp" ]]; then
     setup-addon-manifests "addons" "fluentd-gcp"
+    local -r fluentd_gcp_yaml="${dst_dir}/fluentd-gcp/fluentd-gcp-ds.yaml"
+    start-fluentd-resource-update
   fi
   if [[ "${ENABLE_CLUSTER_UI:-}" == "true" ]]; then
     setup-addon-manifests "addons" "dashboard"
@@ -1710,20 +1714,9 @@ function start-kube-addons {
   if [[ "${NETWORK_POLICY_PROVIDER:-}" == "calico" ]]; then
     setup-addon-manifests "addons" "calico-policy-controller"
 
-    # Configure Calico based on cluster size and image type.
+    # Configure Calico CNI directory.
     local -r ds_file="${dst_dir}/calico-policy-controller/calico-node-daemonset.yaml"
-    local -r typha_dep_file="${dst_dir}/calico-policy-controller/typha-deployment.yaml"
     sed -i -e "s@__CALICO_CNI_DIR__@/home/kubernetes/bin@g" "${ds_file}"
-    sed -i -e "s@__CALICO_NODE_CPU__@$(get-calico-node-cpu)@g" "${ds_file}"
-    sed -i -e "s@__CALICO_TYPHA_CPU__@$(get-calico-typha-cpu)@g" "${typha_dep_file}"
-    sed -i -e "s@__CALICO_TYPHA_REPLICAS__@$(get-calico-typha-replicas)@g" "${typha_dep_file}"
-  else
-    # If not configured to use Calico, the set the typha replica count to 0, but only if the 
-    # addon is present.
-    local -r typha_dep_file="${dst_dir}/calico-policy-controller/typha-deployment.yaml"
-    if [[ -e $typha_dep_file ]]; then
-      sed -i -e "s@__CALICO_TYPHA_REPLICAS__@0@g" "${typha_dep_file}"
-    fi
   fi
   if [[ "${ENABLE_DEFAULT_STORAGE_CLASS:-}" == "true" ]]; then
     setup-addon-manifests "addons" "storage-class/gce"

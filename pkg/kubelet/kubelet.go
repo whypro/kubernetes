@@ -61,6 +61,7 @@ import (
 	componentconfigv1alpha1 "k8s.io/kubernetes/pkg/apis/componentconfig/v1alpha1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 	clientcertificates "k8s.io/kubernetes/pkg/client/clientset_generated/clientset/typed/certificates/v1beta1"
+	v1coregenerated "k8s.io/kubernetes/pkg/client/clientset_generated/clientset/typed/core/v1"
 	corelisters "k8s.io/kubernetes/pkg/client/listers/core/v1"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 	"k8s.io/kubernetes/pkg/features"
@@ -231,6 +232,7 @@ type KubeletDeps struct {
 	ContainerManager   cm.ContainerManager
 	DockerClient       libdocker.Interface
 	EventClient        v1core.EventsGetter
+	HeartbeatClient    v1coregenerated.CoreV1Interface
 	KubeClient         clientset.Interface
 	ExternalKubeClient clientgoclientset.Interface
 	Mounter            mount.Interface
@@ -443,6 +445,7 @@ func NewMainKubelet(kubeCfg *componentconfig.KubeletConfiguration, kubeDeps *Kub
 		hostname:                       hostname,
 		nodeName:                       nodeName,
 		kubeClient:                     kubeDeps.KubeClient,
+		heartbeatClient:                kubeDeps.HeartbeatClient,
 		rootDirectory:                  kubeCfg.RootDirectory,
 		resyncInterval:                 kubeCfg.SyncFrequency.Duration,
 		sourcesReady:                   config.NewSourcesReady(kubeDeps.PodConfig.SeenAllSources),
@@ -623,6 +626,7 @@ func NewMainKubelet(kubeCfg *componentconfig.KubeletConfiguration, kubeDeps *Kub
 			containerRefManager,
 			machineInfo,
 			klet.podManager,
+			klet,
 			kubeDeps.OSInterface,
 			klet,
 			httpClient,
@@ -841,12 +845,13 @@ type serviceLister interface {
 type Kubelet struct {
 	kubeletConfiguration componentconfig.KubeletConfiguration
 
-	hostname      string
-	nodeName      types.NodeName
-	runtimeCache  kubecontainer.RuntimeCache
-	kubeClient    clientset.Interface
-	iptClient     utilipt.Interface
-	rootDirectory string
+	hostname        string
+	nodeName        types.NodeName
+	runtimeCache    kubecontainer.RuntimeCache
+	kubeClient      clientset.Interface
+	heartbeatClient v1coregenerated.CoreV1Interface
+	iptClient       utilipt.Interface
+	rootDirectory   string
 
 	// podWorkers handle syncing Pods in response to events.
 	podWorkers PodWorkers

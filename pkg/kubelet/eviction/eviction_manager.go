@@ -274,10 +274,6 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 	}
 	debugLogThresholdsWithObservation("thresholds - reclaim not satisfied", thresholds, observations)
 
-	// determine the set of thresholds whose stats have been updated since the last sync
-	thresholds = thresholdsUpdatedStats(thresholds, observations, m.lastObservations)
-	debugLogThresholdsWithObservation("thresholds - updated stats", thresholds, observations)
-
 	// track when a threshold was first observed
 	now := m.clock.Now()
 	thresholdsFirstObservedAt := thresholdsFirstObservedAt(thresholds, m.thresholdsFirstObservedAt, now)
@@ -307,6 +303,11 @@ func (m *managerImpl) synchronize(diskInfoProvider DiskInfoProvider, podFunc Act
 	m.thresholdsFirstObservedAt = thresholdsFirstObservedAt
 	m.nodeConditionsLastObservedAt = nodeConditionsLastObservedAt
 	m.thresholdsMet = thresholds
+
+	// determine the set of thresholds whose stats have been updated since the last sync
+	thresholds = thresholdsUpdatedStats(thresholds, observations, m.lastObservations)
+	debugLogThresholdsWithObservation("thresholds - updated stats", thresholds, observations)
+
 	m.lastObservations = observations
 	m.Unlock()
 
@@ -491,7 +492,7 @@ func (m *managerImpl) emptyDirLimitEviction(podStats statsapi.PodStats, pod *v1.
 		if source.EmptyDir != nil {
 			size := source.EmptyDir.SizeLimit
 			used := podVolumeUsed[pod.Spec.Volumes[i].Name]
-			if used != nil && size.Sign() == 1 && used.Cmp(size) > 0 {
+			if used != nil && size != nil && size.Sign() == 1 && used.Cmp(*size) > 0 {
 				// the emptyDir usage exceeds the size limit, evict the pod
 				return m.evictPod(pod, v1.ResourceName("EmptyDir"), fmt.Sprintf("emptyDir usage exceeds the limit %q", size.String()))
 			}

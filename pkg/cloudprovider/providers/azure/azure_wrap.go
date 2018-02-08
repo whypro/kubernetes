@@ -33,7 +33,10 @@ func checkResourceExistsFromError(err error) (bool, error) {
 		return true, nil
 	}
 	v, ok := err.(autorest.DetailedError)
-	if ok && v.StatusCode == http.StatusNotFound {
+	if !ok {
+		return false, err
+	}
+	if v.StatusCode == http.StatusNotFound {
 		return false, nil
 	}
 	return false, v
@@ -132,9 +135,16 @@ func (az *Cloud) getPublicIPAddress(name string) (pip network.PublicIPAddress, e
 
 func (az *Cloud) getSubnet(virtualNetworkName string, subnetName string) (subnet network.Subnet, exists bool, err error) {
 	var realErr error
+	var rg string
+
+	if len(az.VnetResourceGroup) > 0 {
+		rg = az.VnetResourceGroup
+	} else {
+		rg = az.ResourceGroup
+	}
 
 	az.operationPollRateLimiter.Accept()
-	subnet, err = az.SubnetsClient.Get(az.ResourceGroup, virtualNetworkName, subnetName, "")
+	subnet, err = az.SubnetsClient.Get(rg, virtualNetworkName, subnetName, "")
 
 	exists, realErr = checkResourceExistsFromError(err)
 	if realErr != nil {

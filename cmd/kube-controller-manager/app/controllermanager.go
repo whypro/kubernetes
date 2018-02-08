@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -365,7 +366,10 @@ func GetAvailableResources(clientBuilder controller.ControllerClientBuilder) (ma
 
 	resourceMap, err := discoveryClient.ServerResources()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get supported resources from server: %v", err)
+		utilruntime.HandleError(fmt.Errorf("unable to get all supported resources from server: %v", err))
+	}
+	if len(resourceMap) == 0 {
+		return nil, fmt.Errorf("unable to get any supported resources from server")
 	}
 
 	allResources := map[schema.GroupVersionResource]bool{}
@@ -382,6 +386,9 @@ func GetAvailableResources(clientBuilder controller.ControllerClientBuilder) (ma
 	return allResources, nil
 }
 
+// CreateControllerContext creates a context struct containing references to resources needed by the
+// controllers such as the cloud provider and clientBuilder. rootClientBuilder is only used for
+// the shared-informers client and token controller.
 func CreateControllerContext(s *options.CMServer, rootClientBuilder, clientBuilder controller.ControllerClientBuilder, stop <-chan struct{}) (ControllerContext, error) {
 	versionedClient := rootClientBuilder.ClientOrDie("shared-informers")
 	sharedInformers := informers.NewSharedInformerFactory(versionedClient, ResyncPeriod(s)())
@@ -395,9 +402,9 @@ func CreateControllerContext(s *options.CMServer, rootClientBuilder, clientBuild
 	if err != nil {
 		return ControllerContext{}, fmt.Errorf("cloud provider could not be initialized: %v", err)
 	}
-	if cloud != nil {
-		// Initialize the cloud provider with a reference to the clientBuilder
-		cloud.Initialize(rootClientBuilder)
+
+	if informerUserCloud, ok := cloud.(cloudprovider.InformerUser); ok {
+		informerUserCloud.SetInformers(sharedInformers)
 	}
 
 	ctx := ControllerContext{
@@ -416,6 +423,12 @@ func StartControllers(ctx ControllerContext, startSATokenController InitFunc, co
 	// If this fails, just return here and fail since other controllers won't be able to get credentials.
 	if _, err := startSATokenController(ctx); err != nil {
 		return err
+	}
+
+	// Initialize the cloud provider with a reference to the clientBuilder only after token controller
+	// has started in case the cloud provider uses the client builder.
+	if ctx.Cloud != nil {
+		ctx.Cloud.Initialize(ctx.ClientBuilder)
 	}
 
 	for controllerName, initFn := range controllers {
