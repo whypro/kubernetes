@@ -18,6 +18,7 @@ package collectors
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	"k8s.io/apimachinery/pkg/util/sets"
 	stats "k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	serverstats "k8s.io/kubernetes/pkg/kubelet/server/stats"
@@ -85,6 +86,7 @@ func (collector *volumeStatsCollecotr) Collect(ch chan<- prometheus.Metric) {
 		lv = append([]string{pvcRef.Namespace, pvcRef.Name}, lv...)
 		ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, v, lv...)
 	}
+	allPVCs := sets.String{}
 	for _, podStat := range statsSummary.Pods {
 		if podStat.VolumeStats == nil {
 			continue
@@ -95,12 +97,18 @@ func (collector *volumeStatsCollecotr) Collect(ch chan<- prometheus.Metric) {
 				// ignore if no PVC reference
 				continue
 			}
+			pvcUniqStr := pvcRef.Namespace + pvcRef.Name
+			if allPVCs.Has(pvcUniqStr) {
+				// ignore if already collected
+				continue
+			}
 			addGauge(volumeStatsCapacityBytesDesc, pvcRef, float64(*volumeStat.CapacityBytes))
 			addGauge(volumeStatsAvailableBytesDesc, pvcRef, float64(*volumeStat.AvailableBytes))
 			addGauge(volumeStatsUsedBytesDesc, pvcRef, float64(*volumeStat.UsedBytes))
 			addGauge(volumeStatsInodesDesc, pvcRef, float64(*volumeStat.Inodes))
 			addGauge(volumeStatsInodesFreeDesc, pvcRef, float64(*volumeStat.InodesFree))
 			addGauge(volumeStatsInodesUsedDesc, pvcRef, float64(*volumeStat.InodesUsed))
+			allPVCs.Insert(pvcUniqStr)
 		}
 	}
 }
