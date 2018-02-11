@@ -97,7 +97,7 @@ func (collector *volumeStatsCollecotr) Collect(ch chan<- prometheus.Metric) {
 				// ignore if no PVC reference
 				continue
 			}
-			pvcUniqStr := pvcRef.Namespace + pvcRef.Name
+			pvcUniqStr := pvcRef.Namespace + "/" + pvcRef.Name
 			if allPVCs.Has(pvcUniqStr) {
 				// ignore if already collected
 				continue
