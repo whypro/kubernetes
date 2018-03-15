@@ -18,6 +18,7 @@ package manager
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/cadvisor/accelerators"
 	"github.com/google/cadvisor/cache/memory"
 	"github.com/google/cadvisor/collector"
 	"github.com/google/cadvisor/container"
@@ -35,6 +37,7 @@ import (
 	"github.com/google/cadvisor/container/systemd"
 	"github.com/google/cadvisor/events"
 	"github.com/google/cadvisor/fs"
+	"github.com/google/cadvisor/gpu"
 	info "github.com/google/cadvisor/info/v1"
 	"github.com/google/cadvisor/info/v2"
 	"github.com/google/cadvisor/machine"
@@ -44,8 +47,6 @@ import (
 	"github.com/google/cadvisor/utils/oomparser"
 	"github.com/google/cadvisor/utils/sysfs"
 	"github.com/google/cadvisor/version"
-
-	"net/http"
 
 	"github.com/golang/glog"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
@@ -206,6 +207,8 @@ func New(memoryCache *memory.InMemoryCache, sysfs sysfs.SysFs, maxHousekeepingIn
 		containerWatchers:        []watcher.ContainerWatcher{},
 		eventsChannel:            eventsChannel,
 		collectorHttpClient:      collectorHttpClient,
+		GPUMonitor:               gpu.NewGPuMonitor(),
+		nvidiaManager:            &accelerators.NvidiaManager{},
 	}
 
 	machineInfo, err := machine.Info(sysfs, fsInfo, inHostNamespace)
@@ -238,6 +241,7 @@ type manager struct {
 	containers               map[namespacedContainerName]*containerData
 	containersLock           sync.RWMutex
 	memoryCache              *memory.InMemoryCache
+	GPUMonitor               gpu.GPUMonitor
 	fsInfo                   fs.FsInfo
 	machineInfo              info.MachineInfo
 	quitChannels             []chan error
@@ -251,6 +255,7 @@ type manager struct {
 	containerWatchers        []watcher.ContainerWatcher
 	eventsChannel            chan watcher.ContainerEvent
 	collectorHttpClient      *http.Client
+	nvidiaManager            accelerators.AcceleratorManager
 }
 
 // Start the container manager.
@@ -303,6 +308,9 @@ func (self *manager) Start() error {
 		return nil
 	}
 
+	// Setup collection of nvidia GPU metrics if any of them are attached to the machine.
+	self.nvidiaManager.Setup()
+
 	// Create root and then recover all containers.
 	err = self.createContainer("/", watcher.Raw)
 	if err != nil {
@@ -327,11 +335,13 @@ func (self *manager) Start() error {
 	quitGlobalHousekeeping := make(chan error)
 	self.quitChannels = append(self.quitChannels, quitGlobalHousekeeping)
 	go self.globalHousekeeping(quitGlobalHousekeeping)
+	go self.GPUMonitor.Start()
 
 	return nil
 }
 
 func (self *manager) Stop() error {
+	defer self.nvidiaManager.Destroy()
 	// Stop and wait on all quit channels.
 	for i, c := range self.quitChannels {
 		// Send the exit signal and wait on the thread to exit (by closing the channel).
@@ -907,9 +917,18 @@ func (m *manager) createContainerLocked(containerName string, watchSource watche
 	}
 
 	logUsage := *logCadvisorUsage && containerName == m.cadvisorContainer
-	cont, err := newContainerData(containerName, m.memoryCache, handler, logUsage, collectorManager, m.maxHousekeepingInterval, m.allowDynamicHousekeeping)
+	cont, err := newContainerData(containerName, m.memoryCache, handler, logUsage, collectorManager, m.maxHousekeepingInterval, m.allowDynamicHousekeeping, m.GPUMonitor)
 	if err != nil {
 		return err
+	}
+	devicesCgroupPath, err := handler.GetCgroupPath("devices")
+	if err != nil {
+		glog.Infof("Error getting devices cgroup path: %v", err)
+	} else {
+		cont.nvidiaCollector, err = m.nvidiaManager.GetCollector(devicesCgroupPath)
+		if err != nil {
+			glog.Infof("GPU metrics may be unavailable/incomplete for container %q: %v", cont.info.Name, err)
+		}
 	}
 
 	// Add collectors
