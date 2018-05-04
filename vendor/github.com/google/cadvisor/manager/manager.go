@@ -38,6 +38,7 @@ import (
 	"github.com/google/cadvisor/container/systemd"
 	"github.com/google/cadvisor/events"
 	"github.com/google/cadvisor/fs"
+	"github.com/google/cadvisor/gpu"
 	info "github.com/google/cadvisor/info/v1"
 	"github.com/google/cadvisor/info/v2"
 	"github.com/google/cadvisor/machine"
@@ -215,6 +216,7 @@ func New(memoryCache *memory.InMemoryCache, sysfs sysfs.SysFs, maxHousekeepingIn
 		eventsChannel:            eventsChannel,
 		collectorHttpClient:      collectorHttpClient,
 		nvidiaManager:            &accelerators.NvidiaManager{},
+		GPUMonitor:               gpu.NewGPuMonitor(),
 	}
 
 	machineInfo, err := machine.Info(sysfs, fsInfo, inHostNamespace)
@@ -247,6 +249,7 @@ type manager struct {
 	containers               map[namespacedContainerName]*containerData
 	containersLock           sync.RWMutex
 	memoryCache              *memory.InMemoryCache
+	GPUMonitor               gpu.GPUMonitor
 	fsInfo                   fs.FsInfo
 	machineInfo              info.MachineInfo
 	quitChannels             []chan error
@@ -345,6 +348,7 @@ func (self *manager) Start() error {
 	quitGlobalHousekeeping := make(chan error)
 	self.quitChannels = append(self.quitChannels, quitGlobalHousekeeping)
 	go self.globalHousekeeping(quitGlobalHousekeeping)
+	go self.GPUMonitor.Start()
 
 	return nil
 }
@@ -936,7 +940,7 @@ func (m *manager) createContainerLocked(containerName string, watchSource watche
 	}
 
 	logUsage := *logCadvisorUsage && containerName == m.cadvisorContainer
-	cont, err := newContainerData(containerName, m.memoryCache, handler, logUsage, collectorManager, m.maxHousekeepingInterval, m.allowDynamicHousekeeping, clock.RealClock{})
+	cont, err := newContainerData(containerName, m.memoryCache, handler, logUsage, collectorManager, m.maxHousekeepingInterval, m.allowDynamicHousekeeping, clock.RealClock{}, m.GPUMonitor)
 	if err != nil {
 		return err
 	}
