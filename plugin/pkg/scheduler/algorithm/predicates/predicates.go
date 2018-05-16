@@ -38,6 +38,7 @@ import (
 	"k8s.io/kubernetes/pkg/cloudprovider/providers/aws"
 	"k8s.io/kubernetes/pkg/features"
 	kubeletapis "k8s.io/kubernetes/pkg/kubelet/apis"
+	kubeletutil "k8s.io/kubernetes/pkg/kubelet/util"
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 	"k8s.io/kubernetes/plugin/pkg/scheduler/algorithm"
 	priorityutil "k8s.io/kubernetes/plugin/pkg/scheduler/algorithm/priorities/util"
@@ -654,8 +655,10 @@ func PodFitsResources(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *s
 		return len(predicateFails) == 0, predicateFails, nil
 	}
 
+	cpuOvercommitRatio := kubeletutil.GetCPUOvercommitRatio(node)
 	allocatable := nodeInfo.AllocatableResource()
-	if allocatable.MilliCPU < podRequest.MilliCPU+nodeInfo.RequestedResource().MilliCPU {
+	glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: ratio: %v, allocatable.MilliCPU: %v, podRequest.MilliCPU: %v, nodeInfo.RequestedResource().MilliCPU: %v", cpuOvercommitRatio, allocatable.MilliCPU, podRequest.MilliCPU, nodeInfo.RequestedResource().MilliCPU)
+	if allocatable.MilliCPU < int64(float64(podRequest.MilliCPU+nodeInfo.RequestedResource().MilliCPU)/cpuOvercommitRatio) {
 		predicateFails = append(predicateFails, NewInsufficientResourceError(v1.ResourceCPU, podRequest.MilliCPU, nodeInfo.RequestedResource().MilliCPU, allocatable.MilliCPU))
 	}
 	if allocatable.Memory < podRequest.Memory+nodeInfo.RequestedResource().Memory {
