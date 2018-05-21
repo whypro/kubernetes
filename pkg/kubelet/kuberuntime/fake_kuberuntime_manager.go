@@ -84,6 +84,7 @@ func NewFakeKubeRuntimeManager(runtimeService internalapi.RuntimeService, imageS
 		runtimeService:      runtimeService,
 		imageService:        imageService,
 		keyring:             keyring,
+		cpuOvercommitRatioGetter: func() float64 { return 1.0 },
 	}
 
 	typedVersion, err := runtimeService.Version(kubeRuntimeAPIVersion)
