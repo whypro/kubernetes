@@ -113,6 +113,8 @@ type kubeGenericRuntimeManager struct {
 
 	// Internal lifecycle event handlers for container resource management.
 	internalLifecycle cm.InternalContainerLifecycle
+
+	cpuOvercommitRatioGetter func() float64
 }
 
 type KubeGenericRuntime interface {
@@ -140,20 +142,22 @@ func NewKubeGenericRuntimeManager(
 	runtimeService internalapi.RuntimeService,
 	imageService internalapi.ImageManagerService,
 	internalLifecycle cm.InternalContainerLifecycle,
+	cpuOvercommitRatioGetter func() float64,
 ) (KubeGenericRuntime, error) {
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
-		recorder:            recorder,
-		cpuCFSQuota:         cpuCFSQuota,
-		seccompProfileRoot:  seccompProfileRoot,
-		livenessManager:     livenessManager,
-		containerRefManager: containerRefManager,
-		machineInfo:         machineInfo,
-		osInterface:         osInterface,
-		runtimeHelper:       runtimeHelper,
-		runtimeService:      newInstrumentedRuntimeService(runtimeService),
-		imageService:        newInstrumentedImageManagerService(imageService),
-		keyring:             credentialprovider.NewDockerKeyring(),
-		internalLifecycle:   internalLifecycle,
+		recorder:                 recorder,
+		cpuCFSQuota:              cpuCFSQuota,
+		seccompProfileRoot:       seccompProfileRoot,
+		livenessManager:          livenessManager,
+		containerRefManager:      containerRefManager,
+		machineInfo:              machineInfo,
+		osInterface:              osInterface,
+		runtimeHelper:            runtimeHelper,
+		runtimeService:           newInstrumentedRuntimeService(runtimeService),
+		imageService:             newInstrumentedImageManagerService(imageService),
+		keyring:                  credentialprovider.NewDockerKeyring(),
+		internalLifecycle:        internalLifecycle,
+		cpuOvercommitRatioGetter: cpuOvercommitRatioGetter,
 	}
 
 	typedVersion, err := kubeRuntimeManager.runtimeService.Version(kubeRuntimeAPIVersion)

@@ -647,6 +647,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 			runtimeService,
 			imageService,
 			kubeDeps.ContainerManager.InternalContainerLifecycle(),
+			klet.cpuOvercommitRatioGetter(),
 		)
 		if err != nil {
 			return nil, err
@@ -849,6 +850,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		return nil, err
 	}
 	klet.AddPodSyncLoopHandler(activeDeadlineHandler)
+	klet.AddPodSyncLoopHandler(klet.syncPodCgroupConfigsHandler())
 	klet.AddPodSyncHandler(activeDeadlineHandler)
 
 	criticalPodAdmissionHandler := preemption.NewCriticalPodAdmissionHandler(klet.GetActivePods, killPodNow(klet.podWorkers, kubeDeps.Recorder), kubeDeps.Recorder)
@@ -1279,7 +1281,7 @@ func (kl *Kubelet) initializeModules() error {
 		return fmt.Errorf("Kubelet failed to get node info: %v", err)
 	}
 
-	if err := kl.containerManager.Start(node, kl.GetActivePods, kl.statusManager, kl.runtimeService); err != nil {
+	if err := kl.containerManager.Start(node, kl.cpuOvercommitRatioGetter(), kl.GetActivePods, kl.statusManager, kl.runtimeService); err != nil {
 		return fmt.Errorf("Failed to start ContainerManager %v", err)
 	}
 
@@ -1306,6 +1308,7 @@ func (kl *Kubelet) initializeRuntimeDependentModules() {
 		// TODO(random-liu): Add backoff logic in the babysitter
 		glog.Fatalf("Failed to start cAdvisor %v", err)
 	}
+
 	// eviction manager must start after cadvisor because it needs to know if the container runtime has a dedicated imagefs
 	kl.evictionManager.Start(kl.cadvisor, kl.GetActivePods, kl.podResourcesAreReclaimed, kl.containerManager, evictionMonitoringPeriod)
 }
@@ -1585,6 +1588,10 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 				}
 				if err := pcm.EnsureExists(pod); err != nil {
 					return fmt.Errorf("failed to ensure that the pod: %v cgroups exist and are correctly applied: %v", pod.UID, err)
+				}
+			} else {
+				if updateType == kubetypes.SyncPodSync {
+					pcm.Update(pod)
 				}
 			}
 		}
