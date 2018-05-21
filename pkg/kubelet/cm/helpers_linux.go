@@ -84,7 +84,7 @@ func MilliCPUToShares(milliCPU int64) int64 {
 }
 
 // ResourceConfigForPod takes the input pod and outputs the cgroup resource config.
-func ResourceConfigForPod(pod *v1.Pod) *ResourceConfig {
+func ResourceConfigForPod(pod *v1.Pod, cpuOvercommitRatio float64) *ResourceConfig {
 	// sum requests and limits.
 	reqs, limits, err := resource.PodRequestsAndLimits(pod)
 	if err != nil {
@@ -106,6 +106,7 @@ func ResourceConfigForPod(pod *v1.Pod) *ResourceConfig {
 
 	// convert to CFS values
 	cpuShares := MilliCPUToShares(cpuRequests)
+	cpuShares = int64(float64(cpuShares) / cpuOvercommitRatio)
 	cpuQuota, cpuPeriod := MilliCPUToQuota(cpuLimits)
 
 	// track if limits were applied for each resource.

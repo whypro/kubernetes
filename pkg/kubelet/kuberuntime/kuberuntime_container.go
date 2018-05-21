@@ -38,6 +38,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubernetes/pkg/api/v1"
+	v1qos "k8s.io/kubernetes/pkg/api/v1/helper/qos"
 	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/v1alpha1/runtime"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/events"
@@ -237,7 +238,15 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerConfig(container *v1.C
 		// of CPU shares.
 		cpuShares = milliCPUToShares(cpuRequest.MilliValue())
 	}
-	lc.Resources.CpuShares = cpuShares
+	qosClass := v1qos.GetPodQOS(pod)
+	if qosClass == v1.PodQOSGuaranteed || qosClass == v1.PodQOSBurstable {
+		cpuOvercommitRatio := m.cpuOvercommitRatioGetter()
+		lc.Resources.CpuShares = int64(float64(cpuShares) / cpuOvercommitRatio)
+		glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: container %s/%s/%s cpu.shares old: %v, actual: %v, ratio: %v", pod.Namespace, pod.Name, container.Name, cpuShares, lc.Resources.CpuShares, cpuOvercommitRatio)
+	} else {
+		glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: container %s/%s/%s we only adjust cpu.shares for qos Guaranteed or Burstable", pod.Namespace, pod.Name, container.Name)
+		lc.Resources.CpuShares = cpuShares
+	}
 	if memoryLimit != 0 {
 		lc.Resources.MemoryLimitInBytes = memoryLimit
 	}

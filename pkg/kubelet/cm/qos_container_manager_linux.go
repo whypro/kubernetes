@@ -39,9 +39,9 @@ const (
 )
 
 type QOSContainerManager interface {
-	Start(func() v1.ResourceList, ActivePodsFunc) error
+	Start(func() v1.ResourceList, ActivePodsFunc, func() float64) error
 	GetQOSContainersInfo() QOSContainersInfo
-	UpdateCgroups() error
+	UpdateCgroups(func() float64) error
 }
 
 type qosContainerManagerImpl struct {
@@ -75,7 +75,7 @@ func (m *qosContainerManagerImpl) GetQOSContainersInfo() QOSContainersInfo {
 	return m.qosContainersInfo
 }
 
-func (m *qosContainerManagerImpl) Start(getNodeAllocatable func() v1.ResourceList, activePods ActivePodsFunc) error {
+func (m *qosContainerManagerImpl) Start(getNodeAllocatable func() v1.ResourceList, activePods ActivePodsFunc, cpuOvercommitRatioGetter func() float64) error {
 	cm := m.cgroupManager
 	rootContainer := m.cgroupRoot
 	if !cm.Exists(CgroupName(rootContainer)) {
@@ -129,7 +129,7 @@ func (m *qosContainerManagerImpl) Start(getNodeAllocatable func() v1.ResourceLis
 	// update qos cgroup tiers on startup and in periodic intervals
 	// to ensure desired state is in synch with actual state.
 	go wait.Until(func() {
-		err := m.UpdateCgroups()
+		err := m.UpdateCgroups(cpuOvercommitRatioGetter)
 		if err != nil {
 			glog.Warningf("[ContainerManager] Failed to reserve QoS requests: %v", err)
 		}
@@ -138,7 +138,7 @@ func (m *qosContainerManagerImpl) Start(getNodeAllocatable func() v1.ResourceLis
 	return nil
 }
 
-func (m *qosContainerManagerImpl) setCPUCgroupConfig(configs map[v1.PodQOSClass]*CgroupConfig) error {
+func (m *qosContainerManagerImpl) setCPUCgroupConfig(configs map[v1.PodQOSClass]*CgroupConfig, cpuOvercommitRatio float64) error {
 	pods := m.activePods()
 	burstablePodCPURequest := int64(0)
 	for i := range pods {
@@ -166,6 +166,8 @@ func (m *qosContainerManagerImpl) setCPUCgroupConfig(configs map[v1.PodQOSClass]
 	if burstableCPUShares < int64(MinShares) {
 		burstableCPUShares = int64(MinShares)
 	}
+	burstableCPUShares = int64(float64(burstableCPUShares) / cpuOvercommitRatio)
+	glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: burstableCPUShares: %v, ratio: %v", burstableCPUShares, cpuOvercommitRatio)
 	configs[v1.PodQOSBurstable].ResourceParameters.CpuShares = &burstableCPUShares
 	return nil
 }
@@ -249,7 +251,7 @@ func (m *qosContainerManagerImpl) retrySetMemoryReserve(configs map[v1.PodQOSCla
 	}
 }
 
-func (m *qosContainerManagerImpl) UpdateCgroups() error {
+func (m *qosContainerManagerImpl) UpdateCgroups(cpuOvercommitRatioGetter func() float64) error {
 	m.Lock()
 	defer m.Unlock()
 
@@ -265,7 +267,8 @@ func (m *qosContainerManagerImpl) UpdateCgroups() error {
 	}
 
 	// update the qos level cgroup settings for cpu shares
-	if err := m.setCPUCgroupConfig(qosConfigs); err != nil {
+	cpuOvercommitRatio := cpuOvercommitRatioGetter()
+	if err := m.setCPUCgroupConfig(qosConfigs, cpuOvercommitRatio); err != nil {
 		return err
 	}
 
@@ -319,10 +322,10 @@ func (m *qosContainerManagerNoop) GetQOSContainersInfo() QOSContainersInfo {
 	return QOSContainersInfo{}
 }
 
-func (m *qosContainerManagerNoop) Start(_ func() v1.ResourceList, _ ActivePodsFunc) error {
+func (m *qosContainerManagerNoop) Start(_ func() v1.ResourceList, _ ActivePodsFunc, _ func() float64) error {
 	return nil
 }
 
-func (m *qosContainerManagerNoop) UpdateCgroups() error {
+func (m *qosContainerManagerNoop) UpdateCgroups(_ func() float64) error {
 	return nil
 }

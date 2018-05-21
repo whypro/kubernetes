@@ -110,6 +110,8 @@ type kubeGenericRuntimeManager struct {
 
 	// The version cache of runtime daemon.
 	versionCache *cache.ObjectCache
+
+	cpuOvercommitRatioGetter func() float64
 }
 
 type KubeGenericRuntime interface {
@@ -136,18 +138,20 @@ func NewKubeGenericRuntimeManager(
 	cpuCFSQuota bool,
 	runtimeService internalapi.RuntimeService,
 	imageService internalapi.ImageManagerService,
+	cpuOvercommitRatioGetter func() float64,
 ) (KubeGenericRuntime, error) {
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
-		recorder:            recorder,
-		cpuCFSQuota:         cpuCFSQuota,
-		livenessManager:     livenessManager,
-		containerRefManager: containerRefManager,
-		machineInfo:         machineInfo,
-		osInterface:         osInterface,
-		runtimeHelper:       runtimeHelper,
-		runtimeService:      newInstrumentedRuntimeService(runtimeService),
-		imageService:        newInstrumentedImageManagerService(imageService),
-		keyring:             credentialprovider.NewDockerKeyring(),
+		recorder:                 recorder,
+		cpuCFSQuota:              cpuCFSQuota,
+		livenessManager:          livenessManager,
+		containerRefManager:      containerRefManager,
+		machineInfo:              machineInfo,
+		osInterface:              osInterface,
+		runtimeHelper:            runtimeHelper,
+		runtimeService:           newInstrumentedRuntimeService(runtimeService),
+		imageService:             newInstrumentedImageManagerService(imageService),
+		keyring:                  credentialprovider.NewDockerKeyring(),
+		cpuOvercommitRatioGetter: cpuOvercommitRatioGetter,
 	}
 
 	typedVersion, err := kubeRuntimeManager.runtimeService.Version(kubeRuntimeAPIVersion)
