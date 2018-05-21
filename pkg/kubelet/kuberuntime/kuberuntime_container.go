@@ -257,7 +257,7 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerConfig(container *v1.C
 	qosClass := v1qos.GetPodQOS(pod)
 	if qosClass == v1.PodQOSGuaranteed || qosClass == v1.PodQOSBurstable {
 		cpuOvercommitRatio := m.cpuOvercommitRatioGetter()
-		lc.Resources.CpuShares = int64(float64(cpuShares) / cpuOvercommitRatio)
+		lc.Resources.CpuShares = cpuSharesAfterCPUOvercommited(cpuShares, cpuOvercommitRatio)
 		glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: container %s/%s/%s cpu.shares old: %v, actual: %v, ratio: %v", pod.Namespace, pod.Name, container.Name, cpuShares, lc.Resources.CpuShares, cpuOvercommitRatio)
 	} else {
 		glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: container %s/%s/%s we only adjust cpu.shares for qos Guaranteed or Burstable", pod.Namespace, pod.Name, container.Name)
