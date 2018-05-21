@@ -102,8 +102,8 @@ func HugePageLimits(resourceList v1.ResourceList) map[int64]int64 {
 	return hugePageLimits
 }
 
-func CPUSharesAfterCPUOvercommited(shares int64, ratio float64) int64 {
-	shares = int64(float64(shares) / ratio)
+func CPUSharesAfterCPUOvercommited(shares uint64, ratio float64) uint64 {
+	shares = uint64(float64(shares) / ratio)
 	if shares < MinShares {
 		return MinShares
 	}
