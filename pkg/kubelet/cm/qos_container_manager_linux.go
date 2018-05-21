@@ -194,7 +194,7 @@ func (m *qosContainerManagerImpl) setCPUCgroupConfig(configs map[v1.PodQOSClass]
 
 	// set burstable shares based on current observe state
 	burstableCPUShares := MilliCPUToShares(burstablePodCPURequest)
-	burstableCPUShares = uint64(float64(burstableCPUShares) / cpuOvercommitRatio)
+	burstableCPUShares = CPUSharesAfterCPUOvercommited(burstableCPUShares, cpuOvercommitRatio)
 	glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: burstableCPUShares: %v, ratio: %v", burstableCPUShares, cpuOvercommitRatio)
 	configs[v1.PodQOSBurstable].ResourceParameters.CpuShares = &burstableCPUShares
 	return nil

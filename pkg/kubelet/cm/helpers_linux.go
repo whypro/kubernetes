@@ -102,6 +102,14 @@ func HugePageLimits(resourceList v1.ResourceList) map[int64]int64 {
 	return hugePageLimits
 }
 
+func CPUSharesAfterCPUOvercommited(shares int64, ratio float64) int64 {
+	shares = int64(float64(shares) / ratio)
+	if shares < MinShares {
+		return MinShares
+	}
+	return shares
+}
+
 // ResourceConfigForPod takes the input pod and outputs the cgroup resource config.
 func ResourceConfigForPod(pod *v1.Pod, cpuOvercommitRatio float64) *ResourceConfig {
 	// sum requests and limits.
@@ -122,7 +130,7 @@ func ResourceConfigForPod(pod *v1.Pod, cpuOvercommitRatio float64) *ResourceConf
 
 	// convert to CFS values
 	cpuShares := MilliCPUToShares(cpuRequests)
-	cpuShares = uint64(float64(cpuShares) / cpuOvercommitRatio)
+	cpuShares = CPUSharesAfterCPUOvercommited(cpuShares, cpuOvercommitRatio)
 	cpuQuota, cpuPeriod := MilliCPUToQuota(cpuLimits)
 
 	// track if limits were applied for each resource.
