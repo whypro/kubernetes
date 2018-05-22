@@ -50,7 +50,7 @@ func parseEndpoint(endpoint string) (string, string, error) {
 }
 
 const (
-	CPUOvercommitRatioAnnotation = "k8s.qiniu.com/cpu_overcommit_ratio"
+	CPUOvercommitRatioAnnotation = "k8s.qiniu.com/cpu-overcommit-ratio"
 	CPUOvercommitRatioMin        = 0.1
 	CPUOvercommitRatioMax        = 10
 )
