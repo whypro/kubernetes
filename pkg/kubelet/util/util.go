@@ -63,7 +63,7 @@ func pathWithinBase(fullPath, basePath string) bool {
 }
 
 const (
-	CPUOvercommitRatioAnnotation = "k8s.qiniu.com/cpu_overcommit_ratio"
+	CPUOvercommitRatioAnnotation = "k8s.qiniu.com/cpu-overcommit-ratio"
 	CPUOvercommitRatioMin        = 0.1
 	CPUOvercommitRatioMax        = 10
 )
