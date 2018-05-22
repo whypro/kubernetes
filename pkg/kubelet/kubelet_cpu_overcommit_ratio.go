@@ -33,7 +33,7 @@ func (kl *Kubelet) cpuOvercommitRatioGetter() func() float64 {
 	}
 }
 
-// Used to update pod cgroup cpu.shares when node cpu_overcommit_ratio is
+// Used to update pod cgroup cpu.shares when node cpu-overcommit-ratio is
 // changed.
 // func (kl *Kubelet) syncPodOnNodeUpdate() {
 // if kl.kubeClient == nil {
@@ -45,7 +45,7 @@ func (kl *Kubelet) cpuOvercommitRatioGetter() func() float64 {
 // sync := func() {
 // pods := kl.getPodsToSync()
 // pcm := kl.containerManager.NewPodContainerManager()
-// glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: %d pods to sync cgroups", len(pods))
+// glog.V(4).Infof("[k8s.qiniu.com/cpu-overcommit-ratio]: %d pods to sync cgroups", len(pods))
 // for _, pod := range pods {
 // err := pcm.Update(pod)
 // if err != nil {
@@ -69,7 +69,7 @@ func (kl *Kubelet) cpuOvercommitRatioGetter() func() float64 {
 // oldratio := util.GetCPUOvercommitRatio(oldnode)
 // newratio := util.GetCPUOvercommitRatio(node)
 // if newratio != oldratio {
-// glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: ratio of node %s changed from %v to %v", node.Name, oldratio, newratio)
+// glog.V(4).Infof("[k8s.qiniu.com/cpu-overcommit-ratio]: ratio of node %s changed from %v to %v", node.Name, oldratio, newratio)
 // }
 // // sync anyway for safety
 // // TODO sync when needed
