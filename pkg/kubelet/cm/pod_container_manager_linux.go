@@ -93,7 +93,7 @@ func (m *podContainerManagerImpl) EnsureExists(pod *v1.Pod) error {
 }
 
 func (m *podContainerManagerImpl) Update(pod *v1.Pod) error {
-	glog.V(4).Infof("[k8s.qiniu.com/cpu_overcommit_ratio]: update cgroup configs for pod %s/%s", pod.Namespace, pod.Name)
+	glog.V(4).Infof("[k8s.qiniu.com/cpu-overcommit-ratio]: update cgroup configs for pod %s/%s", pod.Namespace, pod.Name)
 	podContainerName, _ := m.GetPodContainerName(pod)
 	// Create the pod container
 	containerConfig := &CgroupConfig{
