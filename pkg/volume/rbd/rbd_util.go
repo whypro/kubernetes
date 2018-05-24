@@ -35,6 +35,7 @@ import (
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/wait"
 	fileutil "k8s.io/kubernetes/pkg/util/file"
 	"k8s.io/kubernetes/pkg/util/node"
 	"k8s.io/kubernetes/pkg/volume"
@@ -46,6 +47,11 @@ const (
 	imageSizeStr    = "size "
 	sizeDivStr      = " MB in"
 	kubeLockMagic   = "kubelet_lock_magic_"
+	// The following three values are used for 30 seconds timeout
+	// while waiting for RBD Watcher to expire.
+	rbdImageWatcherInitDelay = 1 * time.Second
+	rbdImageWatcherFactor    = 1.4
+	rbdImageWatcherSteps     = 10
 )
 
 // search /sys/bus for rbd device that matches given pool and image
@@ -217,13 +223,37 @@ func (util *RBDUtil) AttachDisk(b rbdMounter) (string, error) {
 
 		// Currently, we don't acquire advisory lock on image, but for backward
 		// compatibility, we need to check if the image is being used by nodes running old kubelet.
-		found, rbdOutput, err := util.rbdStatus(&b)
-		if err != nil {
-			return "", fmt.Errorf("error: %v, rbd output: %v", err, rbdOutput)
+		// osd_client_watch_timeout defaults to 30 seconds, if the watcher stays active longer than 30 seconds,
+		// rbd image does not get mounted and failure message gets generated.
+		backoff := wait.Backoff{
+			Duration: rbdImageWatcherInitDelay,
+			Factor:   rbdImageWatcherFactor,
+			Steps:    rbdImageWatcherSteps,
 		}
-		if found {
-			glog.Infof("rbd image %s/%s is still being used ", b.Pool, b.Image)
-			return "", fmt.Errorf("rbd image %s/%s is still being used. rbd output: %s", b.Pool, b.Image, rbdOutput)
+		needValidUsed := true
+		// If accessModes contain ReadOnlyMany, we don't need check rbd status of being used.
+		if b.accessModes != nil {
+			for _, v := range b.accessModes {
+				if v != v1.ReadWriteOnce {
+					needValidUsed = false
+					break
+				}
+			}
+		}
+		err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+			used, rbdOutput, err := util.rbdStatus(&b)
+			if err != nil {
+				return false, fmt.Errorf("fail to check rbd image status with: (%v), rbd output: (%s)", err, rbdOutput)
+			}
+			return !needValidUsed || !used, nil
+		})
+		// Return error if rbd image has not become available for the specified timeout.
+		if err == wait.ErrWaitTimeout {
+			return "", fmt.Errorf("rbd image %s/%s is still being used", b.Pool, b.Image)
+		}
+		// Return error if any other errors were encountered during wating for the image to become available.
+		if err != nil {
+			return "", err
 		}
 
 		mon := util.kernelRBDMonitorsOpt(b.Mon)
