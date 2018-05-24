@@ -197,6 +197,7 @@ var (
 		"NodeStatusUpdateFrequency.Duration",
 		"OOMScoreAdj",
 		"PodCIDR",
+		"PodPidsLimit",
 		"PodsPerCore",
 		"Port",
 		"ProtectKernelDefaults",
