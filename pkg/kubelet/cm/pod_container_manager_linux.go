@@ -48,7 +48,6 @@ type podContainerManagerImpl struct {
 	// pod cgroups.
 	cgroupManager            CgroupManager
 	cpuOvercommitRatioGetter func() float64
-	cgroupManager            CgroupManager
 	// Maximum number of pids in a pod
 	podPidsLimit int64
 }
