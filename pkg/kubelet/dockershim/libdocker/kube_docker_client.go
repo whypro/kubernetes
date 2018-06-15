@@ -113,6 +113,7 @@ func (d *kubeDockerClient) ListContainers(options dockertypes.ContainerListOptio
 func (d *kubeDockerClient) InspectContainer(id string) (*dockertypes.ContainerJSON, error) {
 	ctx, cancel := d.getTimeoutContext()
 	defer cancel()
+	glog.Infof("wanghaoyu: starting ContainerInspect, containerID: %s", id)
 	containerJSON, err := d.client.ContainerInspect(ctx, id)
 	if ctxErr := contextError(ctx); ctxErr != nil {
 		return nil, ctxErr

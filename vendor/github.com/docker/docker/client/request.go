@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/golang/glog"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/versions"
 	"github.com/pkg/errors"
@@ -34,6 +36,7 @@ func (cli *Client) head(ctx context.Context, path string, query url.Values, head
 
 // get sends an http request to the docker API using the method GET with a specific Go context.
 func (cli *Client) get(ctx context.Context, path string, query url.Values, headers map[string][]string) (serverResponse, error) {
+	glog.Infof("wanghaoyu: send get request to dockerd, path: %s, query: %+v, headers: %+v", path, query, headers)
 	return cli.sendRequest(ctx, "GET", path, query, nil, headers)
 }
 

@@ -344,6 +344,7 @@ func (ds *dockerService) getIP(podSandboxID string, sandbox *dockertypes.Contain
 // PodSandboxStatus returns the status of the PodSandbox.
 func (ds *dockerService) PodSandboxStatus(podSandboxID string) (*runtimeapi.PodSandboxStatus, error) {
 	// Inspect the container.
+	glog.Infof("wanghaoyu: starting InspectContainer, podSandboxID: %s", podSandboxID)
 	r, err := ds.client.InspectContainer(podSandboxID)
 	if err != nil {
 		return nil, err
@@ -365,6 +366,7 @@ func (ds *dockerService) PodSandboxStatus(podSandboxID string) (*runtimeapi.PodS
 	var IP string
 	// TODO: Remove this when sandbox is available on windows
 	// This is a workaround for windows, where sandbox is not in use, and pod IP is determined through containers belonging to the Pod.
+	glog.Infof("wanghaoyu: starting determinePodIPBySandboxID, podSandboxID: %s", podSandboxID)
 	if IP = ds.determinePodIPBySandboxID(podSandboxID); IP == "" {
 		IP = ds.getIP(podSandboxID, r)
 	}
