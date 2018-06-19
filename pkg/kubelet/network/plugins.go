@@ -357,6 +357,7 @@ func (pm *PluginManager) podLock(fullPodName string) *sync.Mutex {
 		pm.pods[fullPodName] = lock
 	}
 	lock.refcount++
+	glog.Infof("wanghaoyu: pod full name: %s, lock count: %d, lock map: %+v", fullPodName, lock.refcount, pm.pods)
 	return &lock.mu
 }
 
@@ -394,8 +395,9 @@ func (pm *PluginManager) GetPodNetworkStatus(podNamespace, podName string, id ku
 	fullPodName := kubecontainer.BuildPodFullName(podName, podNamespace)
 	pm.podLock(fullPodName).Lock()
 	defer pm.podUnlock(fullPodName)
-
+	glog.Infof("wanghaoyu: starting plugin GetPodNetworkStatus, ns: %s, pod: %s, podSandboxID: %s", podNamespace, podName, id)
 	netStatus, err := pm.plugin.GetPodNetworkStatus(podNamespace, podName, id)
+	glog.Infof("wanghaoyu: finish plugin GetPodNetworkStatus, ns: %s, pod: %s, podSandboxID: %s, err: %v", podNamespace, podName, id, err)
 	if err != nil {
 		return nil, fmt.Errorf("NetworkPlugin %s failed on the status hook for pod %q: %v", pm.plugin.Name(), fullPodName, err)
 	}

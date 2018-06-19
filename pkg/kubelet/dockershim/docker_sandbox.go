@@ -288,7 +288,9 @@ func (ds *dockerService) getIPFromPlugin(sandbox *dockertypes.ContainerJSON) (st
 	}
 	msg := fmt.Sprintf("Couldn't find network status for %s/%s through plugin", metadata.Namespace, metadata.Name)
 	cID := kubecontainer.BuildContainerID(runtimeName, sandbox.ID)
+	glog.Infof("wanghaoyu: starting GetPodNetworkStatus, podSandboxID: %s", sandbox.ID)
 	networkStatus, err := ds.network.GetPodNetworkStatus(metadata.Namespace, metadata.Name, cID)
+	glog.Infof("wanghaoyu: finish GetPodNetworkStatus, podSandboxID: %s", sandbox.ID)
 	if err != nil {
 		return "", err
 	}
@@ -317,7 +319,9 @@ func (ds *dockerService) getIP(podSandboxID string, sandbox *dockertypes.Contain
 		return ""
 	}
 
+	glog.Infof("wanghaoyu: starting getIPFromPlugin, podSandboxID: %s", podSandboxID)
 	ip, err := ds.getIPFromPlugin(sandbox)
+	glog.Infof("wanghaoyu: finish getIPFromPlugin, podSandboxID: %s, ip: %s, err: %v", podSandboxID, ip, err)
 	if err == nil {
 		return ip
 	}
@@ -327,6 +331,7 @@ func (ds *dockerService) getIP(podSandboxID string, sandbox *dockertypes.Contain
 	// conclude that the plugin must have failed setup, or forgotten its ip.
 	// This is not a sensible assumption for plugins across the board, but if
 	// a plugin doesn't want this behavior, it can throw an error.
+	glog.Infof("wanghaoyu: sandbox network settings %+v", sandbox.NetworkSettings)
 	if sandbox.NetworkSettings.IPAddress != "" {
 		return sandbox.NetworkSettings.IPAddress
 	}
@@ -346,6 +351,7 @@ func (ds *dockerService) PodSandboxStatus(podSandboxID string) (*runtimeapi.PodS
 	// Inspect the container.
 	glog.Infof("wanghaoyu: starting InspectContainer, podSandboxID: %s", podSandboxID)
 	r, err := ds.client.InspectContainer(podSandboxID)
+	glog.Infof("wanghaoyu: finish InspectContainer, podSandboxID: %s, err: %+v", podSandboxID, err)
 	if err != nil {
 		return nil, err
 	}
@@ -366,9 +372,10 @@ func (ds *dockerService) PodSandboxStatus(podSandboxID string) (*runtimeapi.PodS
 	var IP string
 	// TODO: Remove this when sandbox is available on windows
 	// This is a workaround for windows, where sandbox is not in use, and pod IP is determined through containers belonging to the Pod.
-	glog.Infof("wanghaoyu: starting determinePodIPBySandboxID, podSandboxID: %s", podSandboxID)
 	if IP = ds.determinePodIPBySandboxID(podSandboxID); IP == "" {
+		glog.Infof("wanghaoyu: starting getIP, podSandboxID: %s", podSandboxID)
 		IP = ds.getIP(podSandboxID, r)
+		glog.Infof("wanghaoyu: finish getIP, podSandboxID: %s, IP: %s", podSandboxID, IP)
 	}
 	hostNetwork := sharesHostNetwork(r)
 

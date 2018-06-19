@@ -859,6 +859,9 @@ func (m *kubeGenericRuntimeManager) GetPodStatus(uid kubetypes.UID, name, namesp
 	sandboxStatuses := make([]*runtimeapi.PodSandboxStatus, len(podSandboxIDs))
 	podIP := ""
 	glog.Infof("wanghaoyu: starting GetPodStatus loop, podID: %s, podName: %s, podNamespace: %s, podSandboxIDs: %v", uid, name, namespace, podSandboxIDs)
+	defer func() {
+		glog.Infof("wanghaoyu: finish GetPodStatus loop, podID: %s, podName: %s, podNamespace: %s, podSandboxIDs: %v", uid, name, namespace, podSandboxIDs)
+	}()
 	for idx, podSandboxID := range podSandboxIDs {
 		glog.Infof("wanghaoyu: starting PodSandboxStatus, podID: %s, podName: %s, podNamespace: %s, podSandboxID: %s", uid, name, namespace, podSandboxID)
 		podSandboxStatus, err := m.runtimeService.PodSandboxStatus(podSandboxID)
@@ -870,7 +873,6 @@ func (m *kubeGenericRuntimeManager) GetPodStatus(uid kubetypes.UID, name, namesp
 
 		// Only get pod IP from latest sandbox
 		if idx == 0 && podSandboxStatus.State == runtimeapi.PodSandboxState_SANDBOX_READY {
-			glog.Infof("wanghaoyu: starting determinePodSandboxIP, podID: %s, podName: %s, podNamespace: %s, podSandboxID: %s", uid, name, namespace, podSandboxID)
 			podIP = m.determinePodSandboxIP(namespace, name, podSandboxStatus)
 		}
 	}

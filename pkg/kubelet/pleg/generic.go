@@ -377,6 +377,9 @@ func (g *GenericPLEG) updateCache(pod *kubecontainer.Pod, pid types.UID) error {
 	// GetPodStatus(pod *kubecontainer.Pod) so that Docker can avoid listing
 	// all containers again.
 	glog.Infof("wanghaoyu: starting GetPodStatus, id: %s, name: %s, namespace: %s", pod.ID, pod.Name, pod.Namespace)
+	defer func() {
+		glog.Infof("wanghaoyu: finish GetPodStatus, id: %s, name: %s, namespace: %s", pod.ID, pod.Name, pod.Namespace)
+	}()
 	status, err := g.runtime.GetPodStatus(pod.ID, pod.Name, pod.Namespace)
 	glog.V(4).Infof("PLEG: Write status for %s/%s: %#v (err: %v)", pod.Name, pod.Namespace, status, err)
 	if err == nil {
