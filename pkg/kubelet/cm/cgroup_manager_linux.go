@@ -30,6 +30,8 @@ import (
 	cgroupsystemd "github.com/opencontainers/runc/libcontainer/cgroups/systemd"
 	libcontainerconfigs "github.com/opencontainers/runc/libcontainer/configs"
 	"k8s.io/apimachinery/pkg/util/sets"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	kubefeatures "k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 )
 
@@ -303,6 +305,7 @@ type subsystem interface {
 var supportedSubsystems = []subsystem{
 	&cgroupfs.MemoryGroup{},
 	&cgroupfs.CpuGroup{},
+	&cgroupfs.PidsGroup{},
 }
 
 // setSupportedSubsystems sets cgroup resource limits only on the supported
@@ -380,6 +383,10 @@ func (m *cgroupManagerImpl) Update(cgroupConfig *CgroupConfig) error {
 		Paths:     cgroupPaths,
 	}
 
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.SupportPodPidsLimit) && cgroupConfig.ResourceParameters.PodPidsLimit != nil {
+		libcontainerCgroupConfig.PidsLimit = *cgroupConfig.ResourceParameters.PodPidsLimit
+	}
+
 	if err := setSupportedSubsystems(libcontainerCgroupConfig); err != nil {
 		return fmt.Errorf("failed to set supported cgroup subsystems for cgroup %v: %v", cgroupConfig.Name, err)
 	}
@@ -411,6 +418,10 @@ func (m *cgroupManagerImpl) Create(cgroupConfig *CgroupConfig) error {
 		Name:      driverName,
 		Parent:    driverParent,
 		Resources: resources,
+	}
+
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.SupportPodPidsLimit) && cgroupConfig.ResourceParameters.PodPidsLimit != nil {
+		libcontainerCgroupConfig.PidsLimit = *cgroupConfig.ResourceParameters.PodPidsLimit
 	}
 
 	// get the manager with the specified cgroup configuration

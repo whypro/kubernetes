@@ -78,7 +78,8 @@ type NodeConfig struct {
 	CgroupDriver          string
 	ProtectKernelDefaults bool
 	NodeAllocatableConfig
-	ExperimentalQOSReserved map[v1.ResourceName]int64
+	ExperimentalQOSReserved  map[v1.ResourceName]int64
+	ExperimentalPodPidsLimit int64
 }
 
 type NodeAllocatableConfig struct {

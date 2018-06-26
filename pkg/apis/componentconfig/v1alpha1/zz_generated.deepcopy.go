@@ -257,6 +257,11 @@ func DeepCopy_v1alpha1_KubeletConfiguration(in interface{}, out interface{}, c *
 			*out = new(string)
 			**out = **in
 		}
+		if in.PodPidsLimit != nil {
+			in, out := &in.PodPidsLimit, &out.PodPidsLimit
+			*out = new(int64)
+			**out = **in
+		}
 		if in.CPUCFSQuota != nil {
 			in, out := &in.CPUCFSQuota, &out.CPUCFSQuota
 			*out = new(bool)
