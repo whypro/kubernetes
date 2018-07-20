@@ -168,6 +168,10 @@ func SetDefaults_KubeletConfiguration(obj *KubeletConfiguration) {
 	if obj.VolumePluginDir == "" {
 		obj.VolumePluginDir = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 	}
+	if obj.PodPidsLimit == nil {
+		temp := int64(-1)
+		obj.PodPidsLimit = &temp
+	}
 	if obj.NodeStatusUpdateFrequency == zeroDuration {
 		obj.NodeStatusUpdateFrequency = metav1.Duration{Duration: 10 * time.Second}
 	}
