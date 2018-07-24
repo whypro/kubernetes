@@ -17,13 +17,13 @@ limitations under the License.
 package decorategpupod
 
 import (
-	"testing"
 	"strconv"
+	"testing"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/kubernetes/pkg/api"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/kubernetes/pkg/util/tolerations"
 )
 
@@ -51,10 +51,8 @@ func getPod(name string, numContainers int, needGPU bool) *api.Pod {
 
 func getToleration() *api.Toleration {
 	toleration := &api.Toleration{
-		Key: "dedicated",
-		Operator: api.TolerationOpEqual,
-		Value: "gpu",
-		Effect: api.TaintEffectNoSchedule,
+		Key:      defaultGPUTaintKey,
+		Operator: api.TolerationOpExists,
 	}
 	return toleration
 }
