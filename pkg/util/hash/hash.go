@@ -20,6 +20,7 @@ import (
 	"hash"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/golang/glog"
 )
 
 // DeepHashObject writes specified object to hash using the spew library
@@ -34,4 +35,5 @@ func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 		SpewKeys:       true,
 	}
 	printer.Fprintf(hasher, "%#v", objectToWrite)
+	glog.Info(printer.Sprintf("%#v", objectToWrite))
 }
