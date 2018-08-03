@@ -107,7 +107,7 @@ func newContainerLabels(container *v1.Container, pod *v1.Pod) map[string]string 
 // newContainerAnnotations creates container annotations from v1.Container and v1.Pod.
 func newContainerAnnotations(container *v1.Container, pod *v1.Pod, restartCount int) map[string]string {
 	annotations := map[string]string{}
-	annotations[containerHashLabel] = strconv.FormatUint(kubecontainer.HashContainer(container), 16)
+	annotations[containerHashLabel] = strconv.FormatUint(kubecontainer.HashContainerByPodVersion(pod, container), 16)
 	annotations[containerRestartCountLabel] = strconv.Itoa(restartCount)
 	annotations[containerTerminationMessagePathLabel] = container.TerminationMessagePath
 	annotations[containerTerminationMessagePolicyLabel] = string(container.TerminationMessagePolicy)
