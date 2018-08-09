@@ -75,7 +75,7 @@ func kubeDNSAddon(cfg *kubeadmapi.MasterConfiguration, client clientset.Interfac
 	// Get the YAML manifest conditionally based on the k8s version
 	kubeDNSDeploymentBytes := GetKubeDNSManifest(k8sVersion)
 	dnsDeploymentBytes, err := kubeadmutil.ParseTemplate(kubeDNSDeploymentBytes,
-		struct{ ImageRepository, Arch, Version, DNSBindAddr, DNSProbeAddr, DNSDomain, DNSProbeType, MasterTaintKey string }{
+		struct{ ImageRepository, Arch, Version, DNSBindAddr, DNSProbeAddr, DNSDomain, DNSProbeType, MasterTaintKey, HostNetwork string }{
 			ImageRepository: cfg.ImageRepository,
 			Arch:            runtime.GOARCH,
 			// Get the kube-dns version conditionally based on the k8s version
@@ -85,6 +85,7 @@ func kubeDNSAddon(cfg *kubeadmapi.MasterConfiguration, client clientset.Interfac
 			DNSDomain:      cfg.Networking.DNSDomain,
 			DNSProbeType:   GetKubeDNSProbeType(k8sVersion),
 			MasterTaintKey: kubeadmconstants.LabelNodeRoleMaster,
+			HostNetwork:    getHostNetworkConfig(cfg.FeatureGates),
 		})
 	if err != nil {
 		return fmt.Errorf("error when parsing kube-dns deployment template: %v", err)
@@ -244,4 +245,11 @@ func createDNSService(dnsService *v1.Service, serviceBytes []byte, client client
 		}
 	}
 	return nil
+}
+
+func getHostNetworkConfig(featureGates map[string]bool) string {
+	if features.Enabled(featureGates, features.KubeDNSHostNetwork) {
+		return "hostNetwork: true"
+	}
+	return ""
 }

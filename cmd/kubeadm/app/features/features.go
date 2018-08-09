@@ -41,6 +41,9 @@ const (
 
 	// DynamicKubeletConfig is alpha in v1.9
 	DynamicKubeletConfig = "DynamicKubeletConfig"
+
+	// KubeDnsHostNetwork
+	KubeDNSHostNetwork = "KubeDNSHostNetwork"
 )
 
 var v190 = version.MustParseSemantic("v1.9.0-alpha.1")
@@ -53,6 +56,7 @@ var InitFeatureGates = FeatureList{
 	HighAvailability:     {FeatureSpec: utilfeature.FeatureSpec{Default: false, PreRelease: utilfeature.Alpha}, MinimumVersion: v190, HiddenInHelpText: true},
 	CoreDNS:              {FeatureSpec: utilfeature.FeatureSpec{Default: false, PreRelease: utilfeature.Alpha}, MinimumVersion: v190},
 	DynamicKubeletConfig: {FeatureSpec: utilfeature.FeatureSpec{Default: false, PreRelease: utilfeature.Alpha}, MinimumVersion: v190},
+	KubeDNSHostNetwork:   {FeatureSpec: utilfeature.FeatureSpec{Default: false, PreRelease: utilfeature.Alpha}},
 }
 
 // Feature represents a feature being gated

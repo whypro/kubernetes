@@ -166,6 +166,9 @@ spec:
           requests:
             memory: 20Mi
             cpu: 10m
+      {{ if .HostNetwork }}
+      {{ .HostNetwork }}
+      {{ end }}
       dnsPolicy: Default  # Don't use cluster DNS.
       serviceAccountName: kube-dns
       tolerations:
