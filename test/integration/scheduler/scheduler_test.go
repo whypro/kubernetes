@@ -784,7 +784,7 @@ func TestSchedulerInformers(t *testing.T) {
 		if err != nil {
 			t.Errorf("Error while creating new pod: %v", err)
 		}
-		if err := waitForPodUnschedulable(cs, unschedulable); err != nil {
+		if err := wait.Poll(pollInterval, 30*time.Second, podUnschedulable(cs, test.pod.Namespace, test.pod.Name)); err != nil {
 			t.Errorf("Pod %v got scheduled: %v", unschedulable.Name, err)
 		}
 
