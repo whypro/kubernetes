@@ -282,7 +282,13 @@ func IsNotMountPoint(mounter Interface, file string) (bool, error) {
 // The list equals:
 //   options - 'bind' + 'remount' (no duplicate)
 func isBind(options []string) (bool, []string) {
-	bindRemountOpts := []string{"remount"}
+	// Because we have an FD opened on the subpath bind mount, the "bind" option
+	// needs to be included, otherwise the mount target will error as busy if you
+	// remount as readonly.
+	//
+	// As a consequence, all read only bind mounts will no longer change the underlying
+	// volume mount to be read only.
+	bindRemountOpts := []string{"bind", "remount"}
 	bind := false
 
 	if len(options) != 0 {

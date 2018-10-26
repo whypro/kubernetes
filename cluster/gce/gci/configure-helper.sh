@@ -120,7 +120,7 @@ function get-local-disk-num() {
 function safe-block-symlink(){
   local device="${1}"
   local symdir="${2}"
-  
+
   mkdir -p "${symdir}"
 
   get-or-generate-uuid "${device}"
@@ -195,11 +195,11 @@ function unique-uuid-bind-mount(){
   # Trigger udev refresh so that newly formatted devices are propagated in by-uuid
   udevadm control --reload-rules
   udevadm trigger
-  udevadm settle 
+  udevadm settle
 
   # grep the exact match of actual device, prevents substring matching
   local myuuid=$(ls -l /dev/disk/by-uuid/ | grep "/${actual_device}$" | tr -s ' ' | cut -d ' ' -f 9)
-  # myuuid should be the uuid of the device as found in /dev/disk/by-uuid/ 
+  # myuuid should be the uuid of the device as found in /dev/disk/by-uuid/
   if [[ -z "${myuuid}" ]]; then
     echo "Failed to get a uuid for device ${actual_device} when mounting." >&2
     exit 2
@@ -231,7 +231,7 @@ function mount-ext(){
   local devicenum="${2}"
   local interface="${3}"
   local format="${4}"
-  
+
 
   if [[ -z "${devicenum}" ]]; then
     echo "Failed to get the local disk number for device ${ssd}" >&2
@@ -542,6 +542,9 @@ function create-master-auth {
   fi
   if [[ -n "${KUBE_SCHEDULER_TOKEN:-}" ]]; then
     append_or_replace_prefixed_line "${known_tokens_csv}" "${KUBE_SCHEDULER_TOKEN},"          "system:kube-scheduler,uid:system:kube-scheduler"
+  fi
+  if [[ -n "${KUBE_CLUSTER_AUTOSCALER_TOKEN:-}" ]]; then
+    append_or_replace_prefixed_line "${known_tokens_csv}" "${KUBE_CLUSTER_AUTOSCALER_TOKEN}," "cluster-autoscaler,uid:cluster-autoscaler"
   fi
   if [[ -n "${KUBE_PROXY_TOKEN:-}" ]]; then
     append_or_replace_prefixed_line "${known_tokens_csv}" "${KUBE_PROXY_TOKEN},"              "system:kube-proxy,uid:kube_proxy"
@@ -995,6 +998,30 @@ current-context: kube-scheduler
 EOF
 }
 
+function create-clusterautoscaler-kubeconfig {
+  echo "Creating cluster-autoscaler kubeconfig file"
+  mkdir -p /etc/srv/kubernetes/cluster-autoscaler
+  cat <<EOF >/etc/srv/kubernetes/cluster-autoscaler/kubeconfig
+apiVersion: v1
+kind: Config
+users:
+- name: cluster-autoscaler
+  user:
+    token: ${KUBE_CLUSTER_AUTOSCALER_TOKEN}
+clusters:
+- name: local
+  cluster:
+    insecure-skip-tls-verify: true
+    server: https://localhost:443
+contexts:
+- context:
+    cluster: local
+    user: cluster-autoscaler
+  name: cluster-autoscaler
+current-context: cluster-autoscaler
+EOF
+}
+
 function create-kubescheduler-policy-config {
   echo "Creating kube-scheduler policy config file"
   mkdir -p /etc/srv/kubernetes/kube-scheduler
@@ -1226,7 +1253,9 @@ function start-kubelet {
   if [[ -n "${CONTAINER_RUNTIME_ENDPOINT:-}" ]]; then
     flags+=" --container-runtime-endpoint=${CONTAINER_RUNTIME_ENDPOINT}"
   fi
-
+  if [[ -n "${MAX_PODS_PER_NODE:-}" ]]; then
+    flags+=" --max-pods=${MAX_PODS_PER_NODE}"
+  fi
 
   local -r kubelet_env_file="/etc/default/kubelet"
   echo "KUBELET_OPTS=\"${flags}\"" > "${kubelet_env_file}"
@@ -1248,6 +1277,7 @@ ExecStart=${kubelet_bin} \$KUBELET_OPTS
 WantedBy=multi-user.target
 EOF
 
+  systemctl daemon-reload
   systemctl start kubelet.service
 }
 
@@ -1259,13 +1289,18 @@ function start-node-problem-detector {
   local -r km_config="${KUBE_HOME}/node-problem-detector/config/kernel-monitor.json"
   # TODO(random-liu): Handle this for alternative container runtime.
   local -r dm_config="${KUBE_HOME}/node-problem-detector/config/docker-monitor.json"
+  local -r custom_km_config="${KUBE_HOME}/node-problem-detector/config/kernel-monitor-counter.json"
   echo "Using node problem detector binary at ${npd_bin}"
   local flags="${NPD_TEST_LOG_LEVEL:-"--v=2"} ${NPD_TEST_ARGS:-}"
   flags+=" --logtostderr"
   flags+=" --system-log-monitors=${km_config},${dm_config}"
+  flags+=" --custom-plugin-monitors=${custom_km_config}"
   flags+=" --apiserver-override=https://${KUBERNETES_MASTER_NAME}?inClusterConfig=false&auth=/var/lib/node-problem-detector/kubeconfig"
   local -r npd_port=${NODE_PROBLEM_DETECTOR_PORT:-20256}
   flags+=" --port=${npd_port}"
+  if [[ -n "${EXTRA_NPD_ARGS:-}" ]]; then
+    flags+=" ${EXTRA_NPD_ARGS}"
+  fi
 
   # Write the systemd service file for node problem detector.
   cat <<EOF >/etc/systemd/system/node-problem-detector.service
@@ -1368,6 +1403,7 @@ function prepare-etcd-manifest {
   local cluster_state="new"
   local etcd_protocol="http"
   local etcd_creds=""
+  local etcd_extra_args="${ETCD_EXTRA_ARGS:-}"
 
   if [[ -n "${INITIAL_ETCD_CLUSTER_STATE:-}" ]]; then
     cluster_state="${INITIAL_ETCD_CLUSTER_STATE}"
@@ -1423,6 +1459,7 @@ function prepare-etcd-manifest {
   fi
   sed -i -e "s@{{ *etcd_protocol *}}@$etcd_protocol@g" "${temp_file}"
   sed -i -e "s@{{ *etcd_creds *}}@$etcd_creds@g" "${temp_file}"
+  sed -i -e "s@{{ *etcd_extra_args *}}@$etcd_extra_args@g" "${temp_file}"
   if [[ -n "${ETCD_VERSION:-}" ]]; then
     sed -i -e "s@{{ *pillar\.get('etcd_version', '\(.*\)') *}}@${ETCD_VERSION}@g" "${temp_file}"
   else
@@ -1697,15 +1734,19 @@ function start-kube-apiserver {
   if [[ -n "${FEATURE_GATES:-}" ]]; then
     params+=" --feature-gates=${FEATURE_GATES}"
   fi
-  if [[ -n "${PROJECT_ID:-}" && -n "${TOKEN_URL:-}" && -n "${TOKEN_BODY:-}" && -n "${NODE_NETWORK:-}" ]]; then
+  if [[ -n "${MASTER_ADVERTISE_ADDRESS:-}" ]]; then
+    params+=" --advertise-address=${MASTER_ADVERTISE_ADDRESS}"
+    if [[ -n "${PROXY_SSH_USER:-}" ]]; then
+      params+=" --ssh-user=${PROXY_SSH_USER}"
+      params+=" --ssh-keyfile=/etc/srv/sshproxy/.sshkeyfile"
+    fi
+  elif [[ -n "${PROJECT_ID:-}" && -n "${TOKEN_URL:-}" && -n "${TOKEN_BODY:-}" && -n "${NODE_NETWORK:-}" ]]; then
     local -r vm_external_ip=$(curl --retry 5 --retry-delay 3 ${CURL_RETRY_CONNREFUSED} --fail --silent -H 'Metadata-Flavor: Google' "http://metadata/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip")
     if [[ -n "${PROXY_SSH_USER:-}" ]]; then
       params+=" --advertise-address=${vm_external_ip}"      
       params+=" --ssh-user=${PROXY_SSH_USER}"
       params+=" --ssh-keyfile=/etc/srv/sshproxy/.sshkeyfile"
     fi
-  elif [ -n "${MASTER_ADVERTISE_ADDRESS:-}" ]; then
-    params="${params} --advertise-address=${MASTER_ADVERTISE_ADDRESS}"
   fi
 
   local webhook_authn_config_mount=""
@@ -1945,6 +1986,8 @@ function start-kube-scheduler {
 function start-cluster-autoscaler {
   if [[ "${ENABLE_CLUSTER_AUTOSCALER:-}" == "true" ]]; then
     echo "Start kubernetes cluster autoscaler"
+    setup-addon-manifests "addons" "rbac/cluster-autoscaler"
+    create-clusterautoscaler-kubeconfig
     prepare-log-file /var/log/cluster-autoscaler.log
 
     # Remove salt comments and replace variables with values
@@ -1952,6 +1995,7 @@ function start-cluster-autoscaler {
     remove-salt-config-comments "${src_file}"
 
     local params="${AUTOSCALER_MIG_CONFIG} ${CLOUD_CONFIG_OPT} ${AUTOSCALER_EXPANDER_CONFIG:---expander=price}"
+    params+=" --kubeconfig=/etc/srv/kubernetes/cluster-autoscaler/kubeconfig"
     sed -i -e "s@{{params}}@${params}@g" "${src_file}"
     sed -i -e "s@{{cloud_config_mount}}@${CLOUD_CONFIG_MOUNT}@g" "${src_file}"
     sed -i -e "s@{{cloud_config_volume}}@${CLOUD_CONFIG_VOLUME}@g" "${src_file}"
@@ -2101,6 +2145,23 @@ EOF
 
   if [[ "${ENABLE_DNS_HORIZONTAL_AUTOSCALER:-}" == "true" ]]; then
     setup-addon-manifests "addons" "dns-horizontal-autoscaler"
+  fi
+}
+
+# A helper function to set up a custom yaml for a k8s addon.
+#
+# $1: addon category under /etc/kubernetes
+# $2: manifest source dir
+# $3: manifest file
+# $4: custom yaml
+function setup-addon-custom-yaml {
+  local -r manifest_path="/etc/kubernetes/$1/$2/$3"
+  local -r custom_yaml="$4"
+  if [ -n "${custom_yaml:-}" ]; then
+    # Replace with custom manifest.
+    cat > "${manifest_path}" <<EOF
+$custom_yaml
+EOF
   fi
 }
 
@@ -2255,6 +2316,9 @@ EOF
   if [[ "${NETWORK_POLICY_PROVIDER:-}" == "calico" ]]; then
     setup-addon-manifests "addons" "calico-policy-controller"
 
+    setup-addon-custom-yaml "addons" "calico-policy-controller" "calico-node-daemonset.yaml" "${CUSTOM_CALICO_NODE_DAEMONSET_YAML:-}"
+    setup-addon-custom-yaml "addons" "calico-policy-controller" "typha-deployment.yaml" "${CUSTOM_TYPHA_DEPLOYMENT_YAML:-}"
+
     # Configure Calico CNI directory.
     local -r ds_file="${dst_dir}/calico-policy-controller/calico-node-daemonset.yaml"
     sed -i -e "s@__CALICO_CNI_DIR__@/home/kubernetes/bin@g" "${ds_file}"
@@ -2288,8 +2352,11 @@ function start-kube-registry-proxy {
   cp "${KUBE_HOME}/kube-manifests/kubernetes/kube-registry-proxy.yaml" /etc/kubernetes/manifests
 }
 
-# Starts a l7 loadbalancing controller for ingress.
+# Setups manifests for ingress controller and gce-specific policies for service controller.
 function start-lb-controller {
+  setup-addon-manifests "addons" "loadbalancing"
+
+  # Starts a l7 loadbalancing controller for ingress.
   if [[ "${ENABLE_L7_LOADBALANCING:-}" == "glbc" ]]; then
     echo "Start GCE L7 pod"
     prepare-log-file /var/log/glbc.log
@@ -2420,9 +2487,10 @@ if [[ -n "${KUBE_USER:-}" ]]; then
   fi
 fi
 
-# generate the controller manager and scheduler tokens here since they are only used on the master.
+# generate the controller manager, scheduler and cluster autoscaler tokens here since they are only used on the master.
 KUBE_CONTROLLER_MANAGER_TOKEN=$(dd if=/dev/urandom bs=128 count=1 2>/dev/null | base64 | tr -d "=+/" | dd bs=32 count=1 2>/dev/null)
 KUBE_SCHEDULER_TOKEN=$(dd if=/dev/urandom bs=128 count=1 2>/dev/null | base64 | tr -d "=+/" | dd bs=32 count=1 2>/dev/null)
+KUBE_CLUSTER_AUTOSCALER_TOKEN=$(dd if=/dev/urandom bs=128 count=1 2>/dev/null | base64 | tr -d "=+/" | dd bs=32 count=1 2>/dev/null)
 
 setup-os-params
 config-ip-firewall
