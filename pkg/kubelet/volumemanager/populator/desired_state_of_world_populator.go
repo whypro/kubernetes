@@ -44,6 +44,9 @@ import (
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 	"k8s.io/kubernetes/pkg/volume/util/volumehelper"
+	logmanagerapi "k8s.io/kubernetes/pkg/kubelet/log/logmanager/api"
+	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
+
 )
 
 // DesiredStateOfWorldPopulator periodically loops through the list of active
@@ -176,6 +179,17 @@ func (dswp *desiredStateOfWorldPopulator) isPodTerminated(pod *v1.Pod) bool {
 	return volumehelper.IsPodTerminated(pod, podStatus)
 }
 
+func (dswp *desiredStateOfWorldPopulator) isPodLogCollectFinished(pod *v1.Pod) bool {
+	if !logmanagerapi.IsPodLogPolicyExists(pod) {
+		return true
+	}
+	podStatus, found := dswp.podStatusProvider.GetPodStatus(pod.UID)
+	if !found {
+		podStatus = pod.Status
+	}
+	return podutil.IsPodLogCollectFinished(podStatus)
+}
+
 // Iterate through all pods and add to desired state of world if they don't
 // exist but should
 func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
@@ -199,6 +213,9 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods() {
 		if podExists {
 			// Skip running pods
 			if !dswp.isPodTerminated(pod) {
+				continue
+			}
+			if !dswp.isPodLogCollectFinished(pod) {
 				continue
 			}
 			if dswp.keepTerminatedPodVolumes {
