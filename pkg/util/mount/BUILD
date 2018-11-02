@@ -16,11 +16,13 @@ go_library(
         "mount.go",
         "mount_unsupported.go",
         "nsenter_mount_unsupported.go",
+        "systemd_unsupported.go",
     ] + select({
         "@io_bazel_rules_go//go/platform:linux_amd64": [
             "exec_mount.go",
             "mount_linux.go",
             "nsenter_mount.go",
+            "systemd.go",
         ],
         "@io_bazel_rules_go//go/platform:windows_amd64": [
             "mount_windows.go",
