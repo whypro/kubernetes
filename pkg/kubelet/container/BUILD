@@ -6,6 +6,7 @@ go_library(
         "cache.go",
         "container_gc.go",
         "container_reference_manager.go",
+        "hackhash.go",
         "helpers.go",
         "os.go",
         "pty_unsupported.go",
@@ -54,6 +55,7 @@ go_test(
     name = "go_default_test",
     srcs = [
         "cache_test.go",
+        "hackhash_test.go",
         "helpers_test.go",
         "ref_test.go",
         "sync_result_test.go",
@@ -63,6 +65,7 @@ go_test(
     deps = [
         "//pkg/api/legacyscheme:go_default_library",
         "//pkg/apis/core/install:go_default_library",
+        "//pkg/util/hash:go_default_library",
         "//vendor/github.com/stretchr/testify/assert:go_default_library",
         "//vendor/k8s.io/api/core/v1:go_default_library",
         "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",

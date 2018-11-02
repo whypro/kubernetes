@@ -34,14 +34,14 @@ go_library(
     }),
     importpath = "k8s.io/kubernetes/pkg/kubelet/util",
     deps = [
+        "//vendor/github.com/golang/glog:go_default_library",
+        "//vendor/k8s.io/api/core/v1:go_default_library",
         "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
     ] + select({
         "@io_bazel_rules_go//go/platform:darwin_amd64": [
-            "//vendor/github.com/golang/glog:go_default_library",
             "//vendor/golang.org/x/sys/unix:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:linux_amd64": [
-            "//vendor/github.com/golang/glog:go_default_library",
             "//vendor/golang.org/x/sys/unix:go_default_library",
         ],
         "//conditions:default": [],

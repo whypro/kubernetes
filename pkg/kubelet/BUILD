@@ -12,6 +12,7 @@ go_library(
         "active_deadline.go",
         "doc.go",
         "kubelet.go",
+        "kubelet_cpu_overcommit_ratio.go",
         "kubelet_getters.go",
         "kubelet_network.go",
         "kubelet_node_status.go",
