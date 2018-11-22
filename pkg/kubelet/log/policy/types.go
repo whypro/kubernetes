@@ -1,8 +1,4 @@
-package api
-
-import (
-	"k8s.io/api/core/v1"
-)
+package policy
 
 // log policy event reason
 const (
@@ -13,11 +9,6 @@ const (
 
 const (
 	PodLogPolicyLabelKey = "alpha.log.qiniu.com/log-policy"
-)
-
-// custom pod conditions
-const (
-	PodLogCollectFinished v1.PodConditionType = "alpha.log.qiniu.com/collect-finished"
 )
 
 type PodLogPolicy struct {

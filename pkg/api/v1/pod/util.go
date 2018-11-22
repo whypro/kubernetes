@@ -23,7 +23,7 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	logmanagerapi "k8s.io/kubernetes/pkg/kubelet/log/logmanager/api"
+	logpolicy "k8s.io/kubernetes/pkg/kubelet/log/policy"
 )
 
 // FindPort locates the container port for the given pod and portName.  If the
@@ -198,7 +198,7 @@ func visitContainerConfigmapNames(container *v1.Container, visitor Visitor) bool
 }
 
 func visitPodLogPolicyConfigmapNames(pod *v1.Pod, visitor Visitor) bool {
-	for name := range logmanagerapi.GetPodLogConfigMapNames(pod) {
+	for name := range logpolicy.GetPodLogConfigMapNames(pod) {
 		if !visitor(name) {
 			return false
 		}
@@ -306,9 +306,4 @@ func UpdatePodCondition(status *v1.PodStatus, condition *v1.PodCondition) bool {
 		// Return true if one of the fields have changed.
 		return !isEqual
 	}
-}
-
-func IsPodLogCollectFinished(status v1.PodStatus) bool {
-	_, condition := GetPodCondition(&status, logmanagerapi.PodLogCollectFinished)
-	return condition != nil && condition.Status == v1.ConditionTrue
 }

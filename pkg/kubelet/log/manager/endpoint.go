@@ -1,4 +1,4 @@
-package logmanager
+package manager
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 // cache during this grace period to cover the time gap for the capacity change to
 // take effect.
 const endpointStopGracePeriod = time.Duration(5) * time.Minute
+const gRPCTimeout = 10 * time.Second
 
 // endpoint maps to a single registered log plugin. It is responsible
 // for managing gRPC communications with the log plugin and caching
@@ -28,6 +29,7 @@ type pluginEndpoint interface {
 	delConfig(name string) (*pluginapi.DelConfigResponse, error)
 	listConfig() (*pluginapi.ListConfigResponse, error)
 	getState(name string) (*pluginapi.GetStateResponse, error)
+	name() string
 }
 
 type pluginEndpointImpl struct {
@@ -40,8 +42,12 @@ type pluginEndpointImpl struct {
 	logPluginName string
 }
 
-// newEndpoint creates a new endpoint for the given resourceName.
-// This is to be used during normal device plugin registration.
+// NewEndpoint creates a new endpoint for the given resourceName.
+// This is to be used during normal log plugin registration.
+func newEndpoint(socketPath, logPluginName string) (pluginEndpoint, error) {
+	return newEndpointImpl(socketPath, logPluginName)
+}
+
 func newEndpointImpl(socketPath, logPluginName string) (*pluginEndpointImpl, error) {
 	client, c, err := dial(socketPath)
 	if err != nil {
@@ -58,7 +64,7 @@ func newEndpointImpl(socketPath, logPluginName string) (*pluginEndpointImpl, err
 }
 
 // newStoppedEndpointImpl creates a new endpoint for the given logPluginName with stopTime set.
-// This is to be used during Kubelet restart, before the actual device plugin re-registers.
+// This is to be used during Kubelet restart, before the actual log plugin re-registers.
 func newStoppedEndpointImpl(logPluginName string) *pluginEndpointImpl {
 	return &pluginEndpointImpl{
 		logPluginName: logPluginName,
@@ -98,14 +104,15 @@ func (e *pluginEndpointImpl) stop() {
 	e.stopTime = time.Now()
 }
 
-// dial establishes the gRPC communication with the registered device plugin.
+// dial establishes the gRPC communication with the registered log plugin.
 func dial(unixSocketPath string) (pluginapi.LogPluginClient, *grpc.ClientConn, error) {
-	c, err := grpc.Dial(unixSocketPath, grpc.WithInsecure(),
+	ctx, cancel := context.WithTimeout(context.Background(), gRPCTimeout)
+	defer cancel()
+	c, err := grpc.DialContext(ctx, unixSocketPath, grpc.WithInsecure(),
 		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 			return net.DialTimeout("unix", addr, timeout)
 		}),
 	)
-
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial to %s error, %v", unixSocketPath, err)
 	}
@@ -117,7 +124,9 @@ func (e *pluginEndpointImpl) addConfig(config *pluginapi.Config) (*pluginapi.Add
 	if e.isStopped() {
 		return nil, fmt.Errorf("endpoint %s is stopped", e.logPluginName)
 	}
-	return e.client.AddConfig(context.Background(), &pluginapi.AddConfigRequest{
+	ctx, cancel := context.WithTimeout(context.Background(), gRPCTimeout)
+	defer cancel()
+	return e.client.AddConfig(ctx, &pluginapi.AddConfigRequest{
 		Config: config,
 	})
 }
@@ -126,7 +135,9 @@ func (e *pluginEndpointImpl) delConfig(name string) (*pluginapi.DelConfigRespons
 	if e.isStopped() {
 		return nil, fmt.Errorf("endpoint %s is stopped", e.logPluginName)
 	}
-	return e.client.DelConfig(context.Background(), &pluginapi.DelConfigRequest{
+	ctx, cancel := context.WithTimeout(context.Background(), gRPCTimeout)
+	defer cancel()
+	return e.client.DelConfig(ctx, &pluginapi.DelConfigRequest{
 		Name: name,
 	})
 }
@@ -135,14 +146,22 @@ func (e *pluginEndpointImpl) listConfig() (*pluginapi.ListConfigResponse, error)
 	if e.isStopped() {
 		return nil, fmt.Errorf("endpoint %s is stopped", e.logPluginName)
 	}
-	return e.client.ListConfig(context.Background(), &pluginapi.Empty{})
+	ctx, cancel := context.WithTimeout(context.Background(), gRPCTimeout)
+	defer cancel()
+	return e.client.ListConfig(ctx, &pluginapi.Empty{})
 }
 
 func (e *pluginEndpointImpl) getState(name string) (*pluginapi.GetStateResponse, error) {
 	if e.isStopped() {
 		return nil, fmt.Errorf("endpoint %s is stopped", e.logPluginName)
 	}
-	return e.client.GetState(context.Background(), &pluginapi.GetStateRequest{
+	ctx, cancel := context.WithTimeout(context.Background(), gRPCTimeout)
+	defer cancel()
+	return e.client.GetState(ctx, &pluginapi.GetStateRequest{
 		Name: name,
 	})
+}
+
+func (e *pluginEndpointImpl) name() string {
+	return e.logPluginName
 }

@@ -1,4 +1,4 @@
-package logmanager
+package manager
 
 import (
 	"fmt"

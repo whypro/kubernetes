@@ -75,7 +75,6 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/kubeletconfig"
 	"k8s.io/kubernetes/pkg/kubelet/kuberuntime"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
-	"k8s.io/kubernetes/pkg/kubelet/log/logmanager"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	"k8s.io/kubernetes/pkg/kubelet/metrics/collectors"
 	"k8s.io/kubernetes/pkg/kubelet/network"
@@ -109,6 +108,8 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/plugin/pkg/scheduler/algorithm/predicates"
 	utilexec "k8s.io/utils/exec"
+	logpolicy "k8s.io/kubernetes/pkg/kubelet/log/policy"
+	logmanager "k8s.io/kubernetes/pkg/kubelet/log/manager"
 )
 
 const (
@@ -836,6 +837,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		klet.dnsConfigurer.SetupDNSinContainerizedMounter(experimentalMounterPath)
 	}
 
+	logPolicyStatusManager := logpolicy.NewPolicyStatusManager()
+
 	// setup volumeManager
 	klet.volumeManager = volumemanager.NewVolumeManager(
 		kubeCfg.EnableControllerAttachDetach,
@@ -848,6 +851,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		kubeDeps.Mounter,
 		klet.getPodsDir(),
 		kubeDeps.Recorder,
+		logPolicyStatusManager,
 		experimentalCheckNodeCapabilitiesBeforeMount,
 		keepTerminatedPodVolumes)
 
@@ -930,7 +934,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		klet.podManager,
 		klet.configMapManager,
 		klet.volumeManager,
-		klet.statusManager,
+		logPolicyStatusManager,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create log plugin manager error, %v", err)
@@ -1398,6 +1402,9 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 		glog.Fatal(err)
 	}
 
+	// Start log plugin manager
+	kl.logPluginManager.Start(kl.sourcesReady)
+
 	// Start volume manager
 	go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)
 
@@ -1425,9 +1432,6 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	// Start component sync loops.
 	kl.statusManager.Start()
 	kl.probeManager.Start()
-
-	// Start log plugin manager
-	kl.logPluginManager.Start(kl.sourcesReady)
 
 	// Start the pod lifecycle event generator.
 	kl.pleg.Start()

@@ -39,7 +39,7 @@ type configMapCacheObject struct {
 type callbackFunc func(configMap *v1.ConfigMap)
 
 type ConfigMapWatcher struct {
-	mutex              sync.Mutex
+	mutex              sync.RWMutex
 	cache              map[string]*configMapCacheObject
 	cacheKeySet        sets.String
 	configMapManager   configmap.Manager
@@ -61,14 +61,18 @@ func NewConfigMapWatcher(
 
 // add new, delete old, update exists
 func (w *ConfigMapWatcher) Sync(keyStrs sets.String) {
+	w.mutex.RLock()
 	added := keyStrs.Difference(w.cacheKeySet)
 	deleted := w.cacheKeySet.Difference(keyStrs)
 	updated := keyStrs.Intersection(w.cacheKeySet)
+	w.mutex.RUnlock()
 
+	w.mutex.Lock()
 	for keyStr := range deleted {
 		delete(w.cache, keyStr)
 		w.cacheKeySet.Delete(keyStr)
 	}
+	w.mutex.Unlock()
 
 	for keyStr := range added.Union(updated) {
 		key := &configMapKey{}
@@ -84,11 +88,11 @@ func (w *ConfigMapWatcher) Sync(keyStrs sets.String) {
 		}
 
 		var cacheObj *configMapCacheObject
-		w.mutex.Lock()
+		w.mutex.RLock()
 		if w.cacheKeySet.Has(keyStr) {
 			cacheObj = w.cache[keyStr]
 		}
-		w.mutex.Unlock()
+		w.mutex.RUnlock()
 
 		// add/update cache obj
 		if (cacheObj == nil) || (cacheObj.resourceVersion != configMap.ResourceVersion) {

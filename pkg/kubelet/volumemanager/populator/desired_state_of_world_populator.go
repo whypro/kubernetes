@@ -44,9 +44,7 @@ import (
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 	"k8s.io/kubernetes/pkg/volume/util/volumehelper"
-	logmanagerapi "k8s.io/kubernetes/pkg/kubelet/log/logmanager/api"
-	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
-
+	logpolicy "k8s.io/kubernetes/pkg/kubelet/log/policy"
 )
 
 // DesiredStateOfWorldPopulator periodically loops through the list of active
@@ -88,6 +86,7 @@ func NewDesiredStateOfWorldPopulator(
 	podStatusProvider status.PodStatusProvider,
 	desiredStateOfWorld cache.DesiredStateOfWorld,
 	kubeContainerRuntime kubecontainer.Runtime,
+	logStatusProvider logpolicy.LogStatusProvider,
 	keepTerminatedPodVolumes bool) DesiredStateOfWorldPopulator {
 	return &desiredStateOfWorldPopulator{
 		kubeClient:                kubeClient,
@@ -102,6 +101,7 @@ func NewDesiredStateOfWorldPopulator(
 		keepTerminatedPodVolumes: keepTerminatedPodVolumes,
 		hasAddedPods:             false,
 		hasAddedPodsLock:         sync.RWMutex{},
+		logStatusProvider:        logStatusProvider,
 	}
 }
 
@@ -118,6 +118,7 @@ type desiredStateOfWorldPopulator struct {
 	keepTerminatedPodVolumes  bool
 	hasAddedPods              bool
 	hasAddedPodsLock          sync.RWMutex
+	logStatusProvider         logpolicy.LogStatusProvider
 }
 
 type processedPods struct {
@@ -179,17 +180,6 @@ func (dswp *desiredStateOfWorldPopulator) isPodTerminated(pod *v1.Pod) bool {
 	return volumehelper.IsPodTerminated(pod, podStatus)
 }
 
-func (dswp *desiredStateOfWorldPopulator) isPodLogCollectFinished(pod *v1.Pod) bool {
-	if !logmanagerapi.IsPodLogPolicyExists(pod) {
-		return true
-	}
-	podStatus, found := dswp.podStatusProvider.GetPodStatus(pod.UID)
-	if !found {
-		podStatus = pod.Status
-	}
-	return podutil.IsPodLogCollectFinished(podStatus)
-}
-
 // Iterate through all pods and add to desired state of world if they don't
 // exist but should
 func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
@@ -215,7 +205,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods() {
 			if !dswp.isPodTerminated(pod) {
 				continue
 			}
-			if !dswp.isPodLogCollectFinished(pod) {
+			if !dswp.logStatusProvider.IsCollectFinished(pod.UID) {
 				continue
 			}
 			if dswp.keepTerminatedPodVolumes {
