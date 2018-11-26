@@ -948,10 +948,6 @@ func (kl *Kubelet) PodResourcesAreReclaimed(pod *v1.Pod, status v1.PodStatus) bo
 		glog.V(3).Infof("Pod %q is terminated, but some containers have not been cleaned up: %+v", format.Pod(pod), runtimeStatus.ContainerStatuses)
 		return false
 	}
-	if !kl.logPluginManager.IsCollectFinished(pod.UID) {
-		glog.V(3).Infof("Pod %q is terminated, but log collecting have not finished", format.Pod(pod))
-		return false
-	}
 	if kl.podVolumesExist(pod.UID) && !kl.keepTerminatedPodVolumes {
 		// We shouldnt delete pods whose volumes have not been cleaned up if we are not keeping terminated pod volumes
 		glog.V(3).Infof("Pod %q is terminated, but some volumes have not been cleaned up", format.Pod(pod))
