@@ -44,7 +44,7 @@ import (
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 	"k8s.io/kubernetes/pkg/volume/util/types"
 	"k8s.io/kubernetes/pkg/volume/util/volumehelper"
-	"k8s.io/kubernetes/pkg/kubelet/log/logmanager"
+	"k8s.io/kubernetes/pkg/kubelet/log/manager"
 )
 
 const (

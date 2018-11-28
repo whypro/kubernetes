@@ -26,6 +26,12 @@ func GetPodLogPolicy(pod *v1.Pod) (*PodLogPolicy, error) {
 		glog.Errorf("json unmarshal error, %v, podLogPolicyLabelValue: %s", err, podLogPolicyLabelValue)
 		return nil, err
 	}
+
+	// TODO: remove later
+	if podLogPolicy.PluginName == "" {
+		podLogPolicy.PluginName = podLogPolicy.LogPlugin
+	}
+	
 	return podLogPolicy, nil
 }
 

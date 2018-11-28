@@ -27,6 +27,7 @@ var testcases = []struct {
   "container_log_policies": {
     "container1": [{
       "category": "std",
+      "path": "-",
       "plugin_configmap": "container1-stdlog"
     }, {
       "category": "app",
@@ -59,12 +60,14 @@ var testcases = []struct {
 		true,
 		&PodLogPolicy{
 			"logexporter",
+			"logexporter",
 			false,
 			map[string]ContainerLogPolicies{
 
 				"container1": {
 					{
 						Category:        "std",
+						Path:            "-",
 						PluginConfigMap: "container1-stdlog",
 					},
 					{
@@ -132,7 +135,6 @@ var testcases = []struct {
 }
 
 func TestIsPodLogPolicyExists(t *testing.T) {
-
 	for _, tc := range testcases {
 		actual := IsPodLogPolicyExists(tc.pod)
 		if actual != tc.logPolicyExists {
@@ -142,7 +144,6 @@ func TestIsPodLogPolicyExists(t *testing.T) {
 }
 
 func TestGetPodLogPolicy(t *testing.T) {
-
 	for _, tc := range testcases {
 		actual, _ := GetPodLogPolicy(tc.pod)
 		if !reflect.DeepEqual(actual, tc.logPolicy) {
@@ -152,7 +153,6 @@ func TestGetPodLogPolicy(t *testing.T) {
 }
 
 func TestGetPodLogConfigMapNames(t *testing.T) {
-
 	for _, tc := range testcases {
 		actual := GetPodLogConfigMapNames(tc.pod)
 		if !actual.Equal(tc.configMapNames) {

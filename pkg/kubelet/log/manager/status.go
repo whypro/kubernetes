@@ -40,9 +40,6 @@ func (m *pluginStatusManager) getLogConfigNames(podUID k8stypes.UID) sets.String
 }
 
 func (m *pluginStatusManager) updateAllLogConfigs(configs []*pluginapi.Config, pluginName string) {
-	if configs == nil {
-		return
-	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	podLogConfigNames := make(map[k8stypes.UID]sets.String)

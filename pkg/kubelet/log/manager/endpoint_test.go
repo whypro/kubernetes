@@ -55,7 +55,7 @@ func TestEndpoint(t *testing.T) {
 		Spec: &pluginapi.ConfigSpec{
 			Content:  "",
 			Category: "std",
-			Path:     "test-path",
+			Path:     "-",
 		},
 	}
 	_, err := ep.addConfig(config)

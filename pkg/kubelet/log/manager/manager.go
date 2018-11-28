@@ -31,6 +31,7 @@ import (
 const (
 	resyncPeriod            = 1 * time.Minute
 	podLogPolicyCategoryStd = "std"
+	podLogPolicyPathStd     = "-"
 	containerLogDirPerm     = 0766
 )
 
@@ -305,7 +306,7 @@ func (m *ManagerImpl) buildPodLogVolumes(pod *v1.Pod, podLogPolicy *policy.PodLo
 	glog.V(7).Infof("got mounted pod volumes: %+v, pod: %q", podVolumes, format.Pod(pod))
 	for containerName, containerLogPolicies := range podLogPolicy.ContainerLogPolicies {
 		for _, containerLogPolicy := range containerLogPolicies {
-			if containerLogPolicy.Category == podLogPolicyCategoryStd {
+			if containerLogPolicy.Path == podLogPolicyPathStd {
 				continue
 			}
 			volumeInfo, exists := podVolumes[containerLogPolicy.VolumeName]
@@ -356,7 +357,7 @@ func (m *ManagerImpl) buildPodLogConfigs(pod *v1.Pod, podLogPolicy *policy.PodLo
 			}
 
 			var path string
-			if containerLogPolicy.Category == podLogPolicyCategoryStd {
+			if containerLogPolicy.Path == podLogPolicyPathStd {
 				path = buildPodLogsDirectory(pod.UID)
 			} else {
 				logVolume, exists := podLogVolumes[containerLogPolicy.VolumeName]
@@ -509,9 +510,9 @@ func (m *ManagerImpl) pushConfigs(pod *v1.Pod) error {
 		return err
 	}
 
-	endpoint, err := m.getLogPluginEndpoint(logPolicy.LogPlugin)
+	endpoint, err := m.getLogPluginEndpoint(logPolicy.PluginName)
 	if err != nil {
-		glog.Errorf("get log plugin endpoint error, %v, log plugin name: %s, pod: %q", err, logPolicy.LogPlugin, format.Pod(pod))
+		glog.Errorf("get log plugin endpoint error, %v, log plugin name: %s, pod: %q", err, logPolicy.PluginName, format.Pod(pod))
 		return err
 	}
 
@@ -595,9 +596,9 @@ func (m *ManagerImpl) RemoveLogPolicy(pod *v1.Pod) error {
 		return fmt.Errorf(message)
 	}
 
-	endpoint, err := m.getLogPluginEndpoint(podLogPolicy.LogPlugin)
+	endpoint, err := m.getLogPluginEndpoint(podLogPolicy.PluginName)
 	if err != nil {
-		glog.Errorf("get log plugin endpoint error, %v, log plugin name: %s, pod: %q", err, podLogPolicy.LogPlugin, format.Pod(pod))
+		glog.Errorf("get log plugin endpoint error, %v, log plugin name: %s, pod: %q", err, podLogPolicy.PluginName, format.Pod(pod))
 		return err
 	}
 
@@ -636,9 +637,9 @@ func (m *ManagerImpl) getPluginCollectState(podUID k8stypes.UID, podLogPolicy *p
 		glog.V(7).Infof("no config found by pod uid: %s", podUID)
 		return true
 	}
-	endpoint, err := m.getLogPluginEndpoint(podLogPolicy.LogPlugin)
+	endpoint, err := m.getLogPluginEndpoint(podLogPolicy.PluginName)
 	if err != nil {
-		glog.Errorf("get log plugin endpoint error, %v, log plugin name: %s, pod uid: %s", err, podLogPolicy.LogPlugin, podUID)
+		glog.Errorf("get log plugin endpoint error, %v, log plugin name: %s, pod uid: %s", err, podLogPolicy.PluginName, podUID)
 		return false
 	}
 	for configName := range configNames {

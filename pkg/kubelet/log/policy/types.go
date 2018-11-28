@@ -13,6 +13,8 @@ const (
 
 type PodLogPolicy struct {
 	// log plugin name, eg. logkit, logexporter
+	PluginName string `json:"plugin_name"`
+	// DEPRECATED: use PluginName instead
 	LogPlugin string `json:"log_plugin"`
 	// ensure all log been collected before pod are terminated
 	// SafeDeletionEnabled == true, pod will keep terminating forever util log plugin says all log are collected.
@@ -25,13 +27,13 @@ type PodLogPolicy struct {
 type ContainerLogPolicies []*ContainerLogPolicy
 
 type ContainerLogPolicy struct {
-	// log category, eg. std(stdout/stderr), app, audit
-	// if category is "std", path and volume_name will make no sense
+	// log category name, eg. std(stdout/stderr), app, audit
 	Category string `json:"category"`
 	// log volume mount path
+	// if path is "-", that means this policy is dedicated for std(stdout/stderr) logs and VolumeName will make no sense.
 	Path string `json:"path"`
 	// volume(mount) name
-	// volume for container log
+	// volume for container file log
 	VolumeName string `json:"volume_name"`
 	// configmap name of log plugin configs
 	PluginConfigMap string `json:"plugin_configmap"`
