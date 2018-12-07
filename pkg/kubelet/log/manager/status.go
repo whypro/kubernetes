@@ -5,7 +5,7 @@ import (
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/logplugin/v1alpha1"
+	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/logplugin/v1beta1"
 )
 
 type pluginStatusManager struct {

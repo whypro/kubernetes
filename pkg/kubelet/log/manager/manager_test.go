@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/logplugin/v1alpha1"
+	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/logplugin/v1beta1"
 	"k8s.io/kubernetes/pkg/kubelet/log/api"
 	"k8s.io/kubernetes/pkg/kubelet/log/api/util"
 	"k8s.io/kubernetes/pkg/kubelet/log/policy"

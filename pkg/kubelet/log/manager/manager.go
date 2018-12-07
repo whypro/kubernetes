@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
-	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/logplugin/v1alpha1"
+	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/logplugin/v1beta1"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/configmap"
 	"k8s.io/kubernetes/pkg/kubelet/log/api/util"
@@ -357,16 +357,19 @@ func (m *ManagerImpl) buildPodLogConfigs(pod *v1.Pod, podLogPolicy *api.PodLogPo
 			return nil, err
 		}
 
-		var path string
+		var hostPath string
+		var logType pluginapi.LogType
 		if containerLogPolicy.Path == podLogPolicyPathStd {
-			path = buildPodLogsDirectory(pod.UID)
+			hostPath = buildPodLogsDirectory(pod.UID)
+			logType = pluginapi.LogType_DockerJsonFile
 		} else {
 			logVolume, exists := podLogVolumes[containerLogPolicy.VolumeName]
 			if !exists {
 				glog.Errorf("volume is not found in log policy, volume name: %s, pod: %q, log policy: %v, log volumes: %v", containerLogPolicy.VolumeName, format.Pod(pod), podLogPolicy, podLogVolumes)
 				continue
 			}
-			path = logVolume.LogDirPath
+			hostPath = logVolume.LogDirPath
+			logType = pluginapi.LogType_Raw
 		}
 
 		// build log config
@@ -374,16 +377,17 @@ func (m *ManagerImpl) buildPodLogConfigs(pod *v1.Pod, podLogPolicy *api.PodLogPo
 			configName := buildLogConfigName(pod.UID, containerLogPolicy.ContainerName, containerLogPolicy.Name, filename)
 			logConfigs[configName] = &pluginapi.Config{
 				Metadata: &pluginapi.ConfigMeta{
-					Name:          configName,
-					PodNamespace:  pod.Namespace,
-					PodName:       pod.Name,
-					PodUID:        string(pod.UID),
-					ContainerName: containerLogPolicy.ContainerName,
+					Name:                   configName,
+					PodNamespace:           pod.Namespace,
+					PodName:                pod.Name,
+					PodUID:                 string(pod.UID),
+					ContainerName:          containerLogPolicy.ContainerName,
+					ContainerLogPolicyName: containerLogPolicy.Name,
+					LogType:                logType,
+					HostPath:               hostPath,
 				},
 				Spec: &pluginapi.ConfigSpec{
-					Content:  content,
-					Path:     path,
-					Category: containerLogPolicy.Name,
+					Content: content,
 				},
 			}
 		}
