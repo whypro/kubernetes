@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"k8s.io/kubernetes/pkg/kubelet/log/api"
 	"net"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
+
 	"k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -20,7 +22,7 @@ import (
 	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/logplugin/v1alpha1"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/configmap"
-	"k8s.io/kubernetes/pkg/kubelet/log/manager/util"
+	"k8s.io/kubernetes/pkg/kubelet/log/api/util"
 	"k8s.io/kubernetes/pkg/kubelet/log/policy"
 	"k8s.io/kubernetes/pkg/kubelet/pod"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
@@ -29,10 +31,9 @@ import (
 )
 
 const (
-	resyncPeriod            = 1 * time.Minute
-	podLogPolicyCategoryStd = "std"
-	podLogPolicyPathStd     = "-"
-	containerLogDirPerm     = 0766
+	resyncPeriod        = 1 * time.Minute
+	podLogPolicyPathStd = "-"
+	containerLogDirPerm = 0766
 )
 
 type sourcesReadyStub struct{}
@@ -55,7 +56,7 @@ type ManagerImpl struct {
 	// managers
 	policyStatusManager policy.LogStatusManager
 	pluginStatusManager *pluginStatusManager
-	configMapWatcher    *util.ConfigMapWatcher
+	configMapWatcher    *ConfigMapWatcher
 	// kubelet managers
 	podManager       pod.Manager
 	configMapManager configmap.Manager
@@ -84,7 +85,7 @@ func NewLogPluginManagerImpl(
 		configMapManager:    configMapManager,
 		volumeManager:       volumeManager,
 	}
-	m.configMapWatcher = util.NewConfigMapWatcher(configMapManager, m.onConfigMapUpdate)
+	m.configMapWatcher = NewConfigMapWatcher(configMapManager, m.onConfigMapUpdate)
 	return m, nil
 }
 
@@ -121,7 +122,11 @@ func (m *ManagerImpl) Start(sourcesReady config.SourcesReady) error {
 	m.sourcesReady = sourcesReady
 
 	socketPath := filepath.Join(m.socketDir, m.socketName)
-	os.MkdirAll(m.socketDir, 0755)
+	err := os.MkdirAll(m.socketDir, 0755)
+	if err != nil {
+		glog.Errorf("make dir error, %v, path: %s", err, m.socketDir)
+		return err
+	}
 
 	// Removes all stale sockets in m.socketDir. Log plugins can monitor
 	// this and use it as a signal to re-register with the new Kubelet.
@@ -150,7 +155,7 @@ func (m *ManagerImpl) Start(sourcesReady config.SourcesReady) error {
 func filterPods(allPods []*v1.Pod) []*v1.Pod {
 	pods := make([]*v1.Pod, 0)
 	for _, p := range allPods {
-		if policy.IsPodLogPolicyExists(p) {
+		if util.IsPodLogPolicyExists(p) {
 			pods = append(pods, p)
 		}
 	}
@@ -299,92 +304,87 @@ func (m *ManagerImpl) addEndpoint(r *pluginapi.RegisterRequest) {
 	glog.Infof("endpoint %q is registered, socket path: %s", r.Name, socketPath)
 }
 
-func (m *ManagerImpl) buildPodLogVolumes(pod *v1.Pod, podLogPolicy *policy.PodLogPolicy) (policy.LogVolumesMap, error) {
+func (m *ManagerImpl) buildPodLogVolumes(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (policy.LogVolumesMap, error) {
 	logVolumes := make(policy.LogVolumesMap)
 	glog.V(7).Infof("getting mounted volume for pod: %q", format.Pod(pod))
 	podVolumes := m.volumeManager.GetMountedVolumesForPod(volumehelper.GetUniquePodName(pod))
 	glog.V(7).Infof("got mounted pod volumes: %+v, pod: %q", podVolumes, format.Pod(pod))
-	for containerName, containerLogPolicies := range podLogPolicy.ContainerLogPolicies {
-		for _, containerLogPolicy := range containerLogPolicies {
-			if containerLogPolicy.Path == podLogPolicyPathStd {
-				continue
-			}
-			volumeInfo, exists := podVolumes[containerLogPolicy.VolumeName]
-			if !exists {
-				err := fmt.Errorf("%q is not found in podVolumes, pod: %q", containerLogPolicy.VolumeName, format.Pod(pod))
-				glog.Error(err)
-				return nil, err
-			}
-			logVolume := &policy.LogVolume{
-				VolumeName: containerLogPolicy.VolumeName,
-				Path:       containerLogPolicy.Path,
-				HostPath:   volumeInfo.Mounter.GetPath(),
-				LogDirPath: buildLogPolicyDirectory(pod.UID, containerName, containerLogPolicy.Category),
-			}
-			logVolumes[containerLogPolicy.VolumeName] = logVolume
+	for _, containerLogPolicy := range podLogPolicy.ContainerLogPolicies {
+		if containerLogPolicy.Path == podLogPolicyPathStd {
+			continue
 		}
+		volumeInfo, exists := podVolumes[containerLogPolicy.VolumeName]
+		if !exists {
+			err := fmt.Errorf("%q is not found in podVolumes, pod: %q", containerLogPolicy.VolumeName, format.Pod(pod))
+			glog.Error(err)
+			return nil, err
+		}
+		logVolume := &policy.LogVolume{
+			VolumeName: containerLogPolicy.VolumeName,
+			Path:       containerLogPolicy.Path,
+			HostPath:   volumeInfo.Mounter.GetPath(),
+			LogDirPath: buildLogPolicyDirectory(pod.UID, containerLogPolicy.ContainerName, containerLogPolicy.Name),
+		}
+		logVolumes[containerLogPolicy.VolumeName] = logVolume
+
 	}
 	return logVolumes, nil
 }
 
-func (m *ManagerImpl) buildPodLogConfigMapKeys(pod *v1.Pod, podLogPolicy *policy.PodLogPolicy) (sets.String, error) {
+func (m *ManagerImpl) buildPodLogConfigMapKeys(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (sets.String, error) {
 	// configMap key set
 	configMapKeys := sets.NewString()
-	for _, containerLogPolicies := range podLogPolicy.ContainerLogPolicies {
-		for _, containerLogPolicy := range containerLogPolicies {
-			// get log config from configmap
-			configMap, err := m.configMapManager.GetConfigMap(pod.Namespace, containerLogPolicy.PluginConfigMap)
-			if err != nil {
-				glog.Errorf("get configmap error, %v, namespace: %s, name: %s, pod: %q", err, pod.Namespace, containerLogPolicy.PluginConfigMap, format.Pod(pod))
-				return nil, err
-			}
-			configMapKeys.Insert(buildConfigMapKey(configMap.Namespace, configMap.Name))
+	for _, containerLogPolicy := range podLogPolicy.ContainerLogPolicies {
+		// get log config from configmap
+		configMap, err := m.configMapManager.GetConfigMap(pod.Namespace, containerLogPolicy.PluginConfigMap)
+		if err != nil {
+			glog.Errorf("get configmap error, %v, namespace: %s, name: %s, pod: %q", err, pod.Namespace, containerLogPolicy.PluginConfigMap, format.Pod(pod))
+			return nil, err
 		}
+		configMapKeys.Insert(buildConfigMapKey(configMap.Namespace, configMap.Name))
 	}
 	return configMapKeys, nil
 }
 
-func (m *ManagerImpl) buildPodLogConfigs(pod *v1.Pod, podLogPolicy *policy.PodLogPolicy, podLogVolumes policy.LogVolumesMap) (logConfigsMap, error) {
+func (m *ManagerImpl) buildPodLogConfigs(pod *v1.Pod, podLogPolicy *api.PodLogPolicy, podLogVolumes policy.LogVolumesMap) (logConfigsMap, error) {
 	// configName -> PluginLogConfig
 	logConfigs := make(logConfigsMap)
-	for containerName, containerLogPolicies := range podLogPolicy.ContainerLogPolicies {
-		for _, containerLogPolicy := range containerLogPolicies {
-			// get log config from configmap
-			configMap, err := m.configMapManager.GetConfigMap(pod.Namespace, containerLogPolicy.PluginConfigMap)
-			if err != nil {
-				glog.Errorf("get configmap error, %v, namespace: %s, name: %s, pod: %q", err, pod.Namespace, containerLogPolicy.PluginConfigMap, format.Pod(pod))
-				return nil, err
-			}
+	for _, containerLogPolicy := range podLogPolicy.ContainerLogPolicies {
+		// get log config from configmap
+		configMap, err := m.configMapManager.GetConfigMap(pod.Namespace, containerLogPolicy.PluginConfigMap)
+		if err != nil {
+			glog.Errorf("get configmap error, %v, namespace: %s, name: %s, pod: %q", err, pod.Namespace, containerLogPolicy.PluginConfigMap, format.Pod(pod))
+			return nil, err
+		}
 
-			var path string
-			if containerLogPolicy.Path == podLogPolicyPathStd {
-				path = buildPodLogsDirectory(pod.UID)
-			} else {
-				logVolume, exists := podLogVolumes[containerLogPolicy.VolumeName]
-				if !exists {
-					glog.Errorf("volume is not found in log policy, volume name: %s, pod: %q, log policy: %v, log volumes: %v", containerLogPolicy.VolumeName, format.Pod(pod), podLogPolicy, podLogVolumes)
-					continue
-				}
-				path = logVolume.LogDirPath
+		var path string
+		if containerLogPolicy.Path == podLogPolicyPathStd {
+			path = buildPodLogsDirectory(pod.UID)
+		} else {
+			logVolume, exists := podLogVolumes[containerLogPolicy.VolumeName]
+			if !exists {
+				glog.Errorf("volume is not found in log policy, volume name: %s, pod: %q, log policy: %v, log volumes: %v", containerLogPolicy.VolumeName, format.Pod(pod), podLogPolicy, podLogVolumes)
+				continue
 			}
+			path = logVolume.LogDirPath
+		}
 
-			// build log config
-			for filename, content := range configMap.Data {
-				configName := buildLogConfigName(pod.UID, containerName, containerLogPolicy.Category, filename)
-				logConfigs[configName] = &pluginapi.Config{
-					Metadata: &pluginapi.ConfigMeta{
-						Name:          configName,
-						PodNamespace:  pod.Namespace,
-						PodName:       pod.Name,
-						PodUID:        string(pod.UID),
-						ContainerName: containerName,
-					},
-					Spec: &pluginapi.ConfigSpec{
-						Content:  content,
-						Path:     path,
-						Category: containerLogPolicy.Category,
-					},
-				}
+		// build log config
+		for filename, content := range configMap.Data {
+			configName := buildLogConfigName(pod.UID, containerLogPolicy.ContainerName, containerLogPolicy.Name, filename)
+			logConfigs[configName] = &pluginapi.Config{
+				Metadata: &pluginapi.ConfigMeta{
+					Name:          configName,
+					PodNamespace:  pod.Namespace,
+					PodName:       pod.Name,
+					PodUID:        string(pod.UID),
+					ContainerName: containerLogPolicy.ContainerName,
+				},
+				Spec: &pluginapi.ConfigSpec{
+					Content:  content,
+					Path:     path,
+					Category: containerLogPolicy.Name,
+				},
 			}
 		}
 	}
@@ -443,7 +443,7 @@ func (m *ManagerImpl) deletePluginConfigs(podUID k8stypes.UID, endpoint pluginEn
 
 func (m *ManagerImpl) refreshPodState(pod *v1.Pod) error {
 	glog.V(7).Infof("refresh pod state, pod: %q", format.Pod(pod))
-	podLogPolicy, err := policy.GetPodLogPolicy(pod)
+	podLogPolicy, err := util.GetPodLogPolicy(pod)
 	if err != nil {
 		glog.Errorf("get pod log policy error, %v, pod: %q", err, format.Pod(pod))
 		return err
@@ -527,7 +527,7 @@ func (m *ManagerImpl) pushConfigs(pod *v1.Pod) error {
 
 func (m *ManagerImpl) CreateLogPolicy(pod *v1.Pod) error {
 	// ignore pod without log policy
-	if !policy.IsPodLogPolicyExists(pod) {
+	if !util.IsPodLogPolicyExists(pod) {
 		return nil
 	}
 
@@ -553,7 +553,7 @@ func (m *ManagerImpl) CreateLogPolicy(pod *v1.Pod) error {
 	}
 
 	glog.Infof("create log policy success, pod: %q", format.Pod(pod))
-	m.recorder.Eventf(pod, v1.EventTypeNormal, policy.LogPolicyCreateSuccess, "create log policy success")
+	m.recorder.Eventf(pod, v1.EventTypeNormal, api.LogPolicyCreateSuccess, "create log policy success")
 
 	return nil
 }
@@ -578,7 +578,7 @@ func (m *ManagerImpl) RemoveLogPolicy(pod *v1.Pod) error {
 		return nil
 	}
 	// ignore pod without log policy
-	if !policy.IsPodLogPolicyExists(pod) {
+	if !util.IsPodLogPolicyExists(pod) {
 		return nil
 	}
 
@@ -611,12 +611,12 @@ func (m *ManagerImpl) RemoveLogPolicy(pod *v1.Pod) error {
 	m.removePodState(pod.UID)
 
 	glog.Infof("remove log policy success, pod: %q", format.Pod(pod))
-	m.recorder.Eventf(pod, v1.EventTypeNormal, policy.LogPolicyRemoveSuccess, "remove log policy success")
+	m.recorder.Eventf(pod, v1.EventTypeNormal, api.LogPolicyRemoveSuccess, "remove log policy success")
 
 	return nil
 }
 
-func (m *ManagerImpl) isCollectFinished(pod *v1.Pod, podLogPolicy *policy.PodLogPolicy) (bool, string) {
+func (m *ManagerImpl) isCollectFinished(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (bool, string) {
 	collectFinished := m.getPluginCollectState(pod.UID, podLogPolicy)
 	if !collectFinished {
 		if podLogPolicy.SafeDeletionEnabled {
@@ -631,7 +631,7 @@ func (m *ManagerImpl) isCollectFinished(pod *v1.Pod, podLogPolicy *policy.PodLog
 	return true, ""
 }
 
-func (m *ManagerImpl) getPluginCollectState(podUID k8stypes.UID, podLogPolicy *policy.PodLogPolicy) bool {
+func (m *ManagerImpl) getPluginCollectState(podUID k8stypes.UID, podLogPolicy *api.PodLogPolicy) bool {
 	configNames := m.pluginStatusManager.getLogConfigNames(podUID)
 	if len(configNames) == 0 {
 		glog.V(7).Infof("no config found by pod uid: %s", podUID)
@@ -688,7 +688,7 @@ func (m *ManagerImpl) onConfigMapUpdate(configMap *v1.ConfigMap) {
 		podConfigMapKeys, err := m.buildPodLogConfigMapKeys(pod, podLogPolicy)
 		if err != nil {
 			glog.Errorf("build pod log configmap key error, %v, pod: %q", err, format.Pod(pod))
-			m.recorder.Eventf(pod, v1.EventTypeWarning, policy.LogPolicyConfigUpdateFailedReason, "build pod log configmap keys error, %v", err)
+			m.recorder.Eventf(pod, v1.EventTypeWarning, api.LogPolicyConfigUpdateFailedReason, "build pod log configmap keys error, %v", err)
 			continue
 		}
 		m.policyStatusManager.UpdateConfigMapKeys(pod.UID, podConfigMapKeys)
@@ -696,7 +696,7 @@ func (m *ManagerImpl) onConfigMapUpdate(configMap *v1.ConfigMap) {
 		err = m.pushConfigs(pod)
 		if err != nil {
 			glog.Errorf("push configs error, %v, pod: %q", err, format.Pod(pod))
-			m.recorder.Eventf(pod, v1.EventTypeWarning, policy.LogPolicyConfigUpdateFailedReason, "push configs to log plugin error, %v", err)
+			m.recorder.Eventf(pod, v1.EventTypeWarning, api.LogPolicyConfigUpdateFailedReason, "push configs to log plugin error, %v", err)
 			continue
 		}
 	}
