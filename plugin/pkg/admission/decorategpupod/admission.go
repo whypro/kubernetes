@@ -25,6 +25,13 @@ const (
 	defaultGPUTaintKey = "node-role.qiniu.com/gpu"
 )
 
+var (
+	toleration = api.Toleration{
+		Key:      defaultGPUTaintKey,
+		Operator: api.TolerationOpExists,
+	}
+)
+
 // Register registers a plugin
 func Register(plugins *admission.Plugins) {
 	plugins.Register("DecorateGPUPod", func(config io.Reader) (admission.Interface, error) {
@@ -38,7 +45,7 @@ type plugin struct {
 }
 
 // NewDecorateGPUPodPlugin creates a new instance of the DecorateGPUPod admission controller
-func NewDecorateGPUPodPlugin() admission.Interface {
+func NewDecorateGPUPodPlugin() admission.MutationInterface {
 	return &plugin{
 		Handler: admission.NewHandler(admission.Create),
 	}
@@ -114,10 +121,6 @@ func (p *plugin) Admit(a admission.Attributes) (err error) {
 	pod, ok := a.GetObject().(*api.Pod)
 	if !ok {
 		return apierrors.NewBadRequest("Resource was marked with kind Pod but was unable to be converted")
-	}
-	toleration := api.Toleration{
-		Key:      defaultGPUTaintKey,
-		Operator: api.TolerationOpExists,
 	}
 	if !checkNeedGPU(pod) {
 		return nil
