@@ -9,6 +9,6 @@ script:
   - travis_wait 120 ./hack/travis.sh
 jobs:
   include:
-  - env: TARGET=cross KUBE_FASTBUILD=true
-  - env: TARGET=test KUBE_TIMEOUT="--timeout 300s"
+  - env: TARGET=cross
+  - env: TARGET=test
   # - env: TARGET=test-integration
