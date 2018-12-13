@@ -37,6 +37,7 @@ import (
 	volumetesting "k8s.io/kubernetes/pkg/volume/testing"
 	"k8s.io/kubernetes/pkg/volume/util/types"
 	"k8s.io/kubernetes/pkg/volume/util/volumehelper"
+	logpolicy "k8s.io/kubernetes/pkg/kubelet/log/policy"
 )
 
 func TestFindAndAddNewPods_FindAndRemoveDeletedPods(t *testing.T) {
@@ -540,6 +541,7 @@ func createDswpWithVolume(t *testing.T, pv *v1.PersistentVolume, pvc *v1.Persist
 			processedPods: make(map[types.UniquePodName]bool)},
 		kubeContainerRuntime:     fakeRuntime,
 		keepTerminatedPodVolumes: false,
+		logStatusProvider: logpolicy.NewPolicyStatusManager(),
 	}
 	return dswp, fakePodManager, fakesDSW
 }
