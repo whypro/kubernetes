@@ -74,6 +74,8 @@ import (
 	_ "k8s.io/kubernetes/pkg/volume/host_path"
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 	"k8s.io/kubernetes/pkg/volume/util"
+	logmanager "k8s.io/kubernetes/pkg/kubelet/log/manager"
+	logpolicy "k8s.io/kubernetes/pkg/kubelet/log/policy"
 )
 
 func init() {
@@ -329,6 +331,8 @@ func newTestKubeletWithImageList(
 		NewInitializedVolumePluginMgr(kubelet, kubelet.secretManager, kubelet.configMapManager, token.NewManager(kubelet.kubeClient), allPlugins, prober)
 	require.NoError(t, err, "Failed to initialize VolumePluginMgr")
 
+	logPolicyStatusManager := logpolicy.NewPolicyStatusManager()
+
 	kubelet.mounter = &mount.FakeMounter{}
 	kubelet.volumeManager = kubeletvolume.NewVolumeManager(
 		controllerAttachDetachEnabled,
@@ -341,7 +345,7 @@ func newTestKubeletWithImageList(
 		kubelet.mounter,
 		kubelet.getPodsDir(),
 		kubelet.recorder,
-		kubelet.logPluginManager,
+		logPolicyStatusManager,
 		false, /* experimentalCheckNodeCapabilitiesBeforeMount*/
 		false /* keepTerminatedPodVolumes */)
 
@@ -351,6 +355,18 @@ func newTestKubeletWithImageList(
 
 	kubelet.AddPodSyncLoopHandler(activeDeadlineHandler)
 	kubelet.AddPodSyncHandler(activeDeadlineHandler)
+
+	logPluginManager, err := logmanager.NewLogPluginManagerImpl(
+		fakeKubeClient,
+		kubelet.recorder,
+		kubelet.podManager,
+		kubelet.configMapManager,
+		kubelet.volumeManager,
+		logPolicyStatusManager,
+	)
+	assert.NoError(t, err)
+	kubelet.logPluginManager = logPluginManager
+
 	return &TestKubelet{kubelet, fakeRuntime, mockCadvisor, fakeKubeClient, fakeMirrorClient, fakeClock, nil, plug}
 }
 
