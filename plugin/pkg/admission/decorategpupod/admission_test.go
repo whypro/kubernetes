@@ -43,19 +43,9 @@ func getPod(name string, numContainers int, needGPU bool) *api.Pod {
 	return pod
 }
 
-func getToleration() *api.Toleration {
-	toleration := &api.Toleration{
-		Key:      "dedicated",
-		Operator: api.TolerationOpEqual,
-		Value:    "gpu",
-		Effect:   api.TaintEffectNoSchedule,
-	}
-	return toleration
-}
-
-func tolerationContains(toleration *api.Toleration, tolerationSlice []api.Toleration) bool {
+func tolerationContains(toleration api.Toleration, tolerationSlice []api.Toleration) bool {
 	for _, t := range tolerationSlice {
-		if tolerations.AreEqual(t, *toleration) {
+		if tolerations.AreEqual(t, toleration) {
 			return true
 		}
 	}
@@ -70,7 +60,7 @@ func TestAdmitNeedGPUOnCreateShouldAddToleration(t *testing.T) {
 		t.Errorf("Unexpected error returned from admission handler")
 	}
 	// check toleration
-	if !tolerationContains(getToleration(), newPod.Spec.Tolerations) {
+	if !tolerationContains(toleration, newPod.Spec.Tolerations) {
 		t.Errorf("Check toleration failed")
 	}
 }
@@ -83,7 +73,7 @@ func TestAdmitNeedGPUOnCreateShouldNotAddToleration(t *testing.T) {
 		t.Errorf("Unexpected error returned from admission handler")
 	}
 	// check toleration
-	if tolerationContains(getToleration(), newPod.Spec.Tolerations) {
+	if tolerationContains(toleration, newPod.Spec.Tolerations) {
 		t.Errorf("Check toleration failed")
 	}
 }

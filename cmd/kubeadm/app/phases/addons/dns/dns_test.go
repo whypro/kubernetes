@@ -92,7 +92,7 @@ func TestCompileManifests(t *testing.T) {
 	}{
 		{
 			manifest: v180AndAboveKubeDNSDeployment,
-			data: struct{ ImageRepository, Arch, Version, DNSBindAddr, DNSProbeAddr, DNSDomain, DNSProbeType, MasterTaintKey string }{
+			data: struct{ ImageRepository, Arch, Version, DNSBindAddr, DNSProbeAddr, DNSDomain, DNSProbeType, MasterTaintKey, HostNetwork string }{
 				ImageRepository: "foo",
 				Arch:            "foo",
 				Version:         "foo",
@@ -101,6 +101,7 @@ func TestCompileManifests(t *testing.T) {
 				DNSDomain:       "foo",
 				DNSProbeType:    "foo",
 				MasterTaintKey:  "foo",
+				HostNetwork:     "foo",
 			},
 			expected: true,
 		},

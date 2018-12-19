@@ -36,6 +36,10 @@ func (m *unsupportedPodContainerManager) EnsureExists(_ *v1.Pod) error {
 	return nil
 }
 
+func (m *unsupportedPodContainerManager) Update(_ *v1.Pod) error {
+	return nil
+}
+
 func (m *unsupportedPodContainerManager) GetPodContainerName(_ *v1.Pod) (CgroupName, string) {
 	return "", ""
 }

@@ -108,6 +108,8 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/plugin/pkg/scheduler/algorithm/predicates"
 	utilexec "k8s.io/utils/exec"
+	logpolicy "k8s.io/kubernetes/pkg/kubelet/log/policy"
+	logmanager "k8s.io/kubernetes/pkg/kubelet/log/manager"
 )
 
 const (
@@ -835,6 +837,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		klet.dnsConfigurer.SetupDNSinContainerizedMounter(experimentalMounterPath)
 	}
 
+	logPolicyStatusManager := logpolicy.NewPolicyStatusManager()
+
 	// setup volumeManager
 	klet.volumeManager = volumemanager.NewVolumeManager(
 		kubeCfg.EnableControllerAttachDetach,
@@ -847,6 +851,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		kubeDeps.Mounter,
 		klet.getPodsDir(),
 		kubeDeps.Recorder,
+		logPolicyStatusManager,
 		experimentalCheckNodeCapabilitiesBeforeMount,
 		keepTerminatedPodVolumes)
 
@@ -921,6 +926,21 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	if klet.gpuManager == nil {
 		klet.gpuManager = gpu.NewGPUManagerStub()
 	}
+
+	// create log plugin manager
+	logPluginManager, err := logmanager.NewLogPluginManagerImpl(
+		kubeDeps.KubeClient,
+		klet.recorder,
+		klet.podManager,
+		klet.configMapManager,
+		klet.volumeManager,
+		logPolicyStatusManager,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create log plugin manager error, %v", err)
+	}
+	klet.logPluginManager = logPluginManager
+
 	// Finally, put the most recent version of the config on the Kubelet, so
 	// people can see how it was configured.
 	klet.kubeletConfiguration = *kubeCfg
@@ -1210,6 +1230,9 @@ type Kubelet struct {
 	// containerized should be set to true if the kubelet is running in a container
 	containerized bool
 
+	// Log Plugin Manager
+	logPluginManager logmanager.Manager
+
 	// This flag, if set, instructs the kubelet to keep volumes from terminated pods mounted to the node.
 	// This can be useful for debugging volume related issues.
 	keepTerminatedPodVolumes bool // DEPRECATED
@@ -1378,6 +1401,9 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 		kl.recorder.Eventf(kl.nodeRef, v1.EventTypeWarning, events.KubeletSetupFailed, err.Error())
 		glog.Fatal(err)
 	}
+
+	// Start log plugin manager
+	kl.logPluginManager.Start(kl.sourcesReady)
 
 	// Start volume manager
 	go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)
@@ -1641,6 +1667,14 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		if err := kl.volumeManager.WaitForAttachAndMount(pod); err != nil {
 			kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedMountVolume, "Unable to mount volumes for pod %q: %v", format.Pod(pod), err)
 			glog.Errorf("Unable to mount volumes for pod %q: %v; skipping pod", format.Pod(pod), err)
+			return err
+		}
+	}
+
+	if !kl.podIsTerminated(pod) {
+		if err := kl.logPluginManager.CreateLogPolicy(pod); err != nil {
+			kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedCreatePodLogPolicy, "create log policy error, pod: %q: %v", format.Pod(pod), err)
+			glog.Errorf("create log policy error, pod: %q: %v", format.Pod(pod), err)
 			return err
 		}
 	}
