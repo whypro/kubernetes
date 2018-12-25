@@ -110,6 +110,7 @@ import (
 	utilexec "k8s.io/utils/exec"
 	logpolicy "k8s.io/kubernetes/pkg/kubelet/log/policy"
 	logmanager "k8s.io/kubernetes/pkg/kubelet/log/manager"
+	logapi "k8s.io/kubernetes/pkg/kubelet/log/api"
 )
 
 const (
@@ -1673,7 +1674,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	if !kl.podIsTerminated(pod) {
 		if err := kl.logPluginManager.CreateLogPolicy(pod); err != nil {
-			kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedCreatePodLogPolicy, "create log policy error, pod: %q: %v", format.Pod(pod), err)
+			kl.recorder.Eventf(pod, v1.EventTypeWarning, logapi.LogPolicyCreateFailed, "create log policy error, pod: %q: %v", format.Pod(pod), err)
 			glog.Errorf("create log policy error, pod: %q: %v", format.Pod(pod), err)
 			return err
 		}
