@@ -24,12 +24,11 @@ import (
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
 )
 
-// TODO: Remove when all pods in cluster have no pod-version annotations
-
 const (
 	podVersionLabel   = "k8s.qiniu.com/pod-version"
 	podVersionLabel17 = "1.7"
 	podVersionLabel18 = "1.8"
+	podVersionLabel19 = "1.9"
 )
 
 // Specific func to hack container hash
@@ -45,9 +44,11 @@ func HashContainerByPodVersion(pod *v1.Pod, container *v1.Container) uint64 {
 	var containerHash uint64
 	version, exists := pod.Annotations[podVersionLabel]
 	if exists && version == podVersionLabel17 {
-		containerHash = hashContainerExt(container, HackContainerHashTo17)
+		containerHash = hashContainerExt(container, hackContainerGoStringTo17)
 	} else if exists && version == podVersionLabel18 {
-		containerHash = hashContainerExt(container, HackContainerHashTo18)
+		containerHash = hashContainerExt(container, hackContainerGoStringTo18)
+	} else if exists && version == podVersionLabel19 {
+		containerHash = hashContainerExt(container, hackContainerGoStringTo19)
 	} else {
 		containerHash = HashContainer(container)
 	}
@@ -55,6 +56,7 @@ func HashContainerByPodVersion(pod *v1.Pod, container *v1.Container) uint64 {
 }
 
 // Convert container hash from 1.8 to 1.7
+// xref: git diff release-1.7..release-1.8 staging/src/k8s.io/api/core/v1/types.go
 func hackGoString18to17(s string) string {
 	// MountPropagation:(*v1.MountPropagationMode)<nil>
 	re := regexp.MustCompile(`\s*MountPropagation:(.*?)([\s}])`)
@@ -66,6 +68,7 @@ func hackGoString18to17(s string) string {
 }
 
 // Convert container hash from 1.9 to 1.8
+// xref: git diff release-1.8..release-1.9 staging/src/k8s.io/api/core/v1/types.go
 func hackGoString19to18(s string) string {
 	// VolumeDevices:([]v1.VolumeDevice)<nil>
 	re := regexp.MustCompile(`\s*VolumeDevices:(.*?)([\s}])`)
@@ -73,10 +76,28 @@ func hackGoString19to18(s string) string {
 	return s
 }
 
-func HackContainerHashTo17(s string) string {
-	return hackGoString18to17(hackGoString19to18(s))
+// Convert container hash from 1.10 to 1.9
+// xref: git diff release-1.9..release-1.10 staging/src/k8s.io/api/core/v1/types.go
+func hackGoString110to19(s string) string {
+	re := regexp.MustCompile(`\s*RunAsGroup:(.*?)([\s}])`)
+	s = re.ReplaceAllString(s, `${2}`)
+	return s
 }
 
-func HackContainerHashTo18(s string) string {
-	return hackGoString19to18(s)
+func hackContainerGoStringTo17(s string) string {
+	s = hackGoString110to19(s)
+	s = hackGoString19to18(s)
+	s = hackGoString18to17(s)
+	return s
+}
+
+func hackContainerGoStringTo18(s string) string {
+	s = hackGoString110to19(s)
+	s = hackGoString19to18(s)
+	return s
+}
+
+func hackContainerGoStringTo19(s string) string {
+	s = hackGoString110to19(s)
+	return s
 }

@@ -39,9 +39,11 @@ func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 	printer.Fprintf(hasher, "%#v", objectToWrite)
 }
 
+// HackFunc is go string hack function.
 type HackFunc func(string) string
 
-// Specific func to hack object hash
+// DeepHashObjectExt works like DeepHashObject except it acceps a hack function
+// to convert go string.
 func DeepHashObjectExt(hasher hash.Hash, objectToWrite interface{}, hackFunc HackFunc) {
 	hasher.Reset()
 	printer := spew.ConfigState{
