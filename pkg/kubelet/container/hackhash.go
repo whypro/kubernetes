@@ -25,10 +25,11 @@ import (
 )
 
 const (
-	podVersionLabel   = "k8s.qiniu.com/pod-version"
-	podVersionLabel17 = "1.7"
-	podVersionLabel18 = "1.8"
-	podVersionLabel19 = "1.9"
+	podVersionLabel    = "k8s.qiniu.com/pod-version"
+	podVersionLabel17  = "1.7"
+	podVersionLabel18  = "1.8"
+	podVersionLabel19  = "1.9"
+	podVersionLabel110 = "1.10"
 )
 
 // Specific func to hack container hash
@@ -49,6 +50,8 @@ func HashContainerByPodVersion(pod *v1.Pod, container *v1.Container) uint64 {
 		containerHash = hashContainerExt(container, hackContainerGoStringTo18)
 	} else if exists && version == podVersionLabel19 {
 		containerHash = hashContainerExt(container, hackContainerGoStringTo19)
+	} else if exists && version == podVersionLabel110 {
+		containerHash = hashContainerExt(container, hackContainerGoStringTo110)
 	} else {
 		containerHash = HashContainer(container)
 	}
@@ -84,7 +87,14 @@ func hackGoString110to19(s string) string {
 	return s
 }
 
+// Convert container hash from 1.11 to 1.10
+// xref: git diff release-1.10..release-1.11 staging/src/k8s.io/api/core/v1/types.go
+func hackGoString111to110(s string) string {
+	return s
+}
+
 func hackContainerGoStringTo17(s string) string {
+	s = hackGoString111to110(s)
 	s = hackGoString110to19(s)
 	s = hackGoString19to18(s)
 	s = hackGoString18to17(s)
@@ -92,12 +102,19 @@ func hackContainerGoStringTo17(s string) string {
 }
 
 func hackContainerGoStringTo18(s string) string {
+	s = hackGoString111to110(s)
 	s = hackGoString110to19(s)
 	s = hackGoString19to18(s)
 	return s
 }
 
 func hackContainerGoStringTo19(s string) string {
+	s = hackGoString111to110(s)
 	s = hackGoString110to19(s)
+	return s
+}
+
+func hackContainerGoStringTo110(s string) string {
+	s = hackGoString111to110(s)
 	return s
 }
