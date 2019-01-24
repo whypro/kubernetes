@@ -11,7 +11,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/configmap"
 )
 
-var updateCallbackFuncErr = fmt.Errorf("updateCallbackFunc not called")
+var errUpdateCallbackFunc = fmt.Errorf("updateCallbackFunc not called")
 
 func TestSync(t *testing.T) {
 	cm := &v1.ConfigMap{
@@ -31,19 +31,19 @@ func TestSync(t *testing.T) {
 	fakeClient.CoreV1().ConfigMaps("test").Update(cm)
 	keyStrs := sets.NewString("test/test-cm")
 	cmw.Sync(keyStrs)
-	if updateCallbackFuncErr != nil {
-		t.Fatalf("test sync failed, %v", updateCallbackFuncErr)
+	if errUpdateCallbackFunc != nil {
+		t.Fatalf("test sync failed, %v", errUpdateCallbackFunc)
 	}
 }
 
 func onTestConfigMapUpdate(configMap *v1.ConfigMap) {
 	if configMap.Namespace != "test" || configMap.Name != "test-cm" {
-		updateCallbackFuncErr = fmt.Errorf("invalid namespace or name, namespace: %s, name: %s", configMap.Namespace, configMap.Name)
+		errUpdateCallbackFunc = fmt.Errorf("invalid namespace or name, namespace: %s, name: %s", configMap.Namespace, configMap.Name)
 		return
 	}
 	if configMap.Data["a"] != "c" {
-		updateCallbackFuncErr = fmt.Errorf("configMap.Data[\"a\"] expect %s, got: %s", "c", configMap.Data["a"])
+		errUpdateCallbackFunc = fmt.Errorf("configMap.Data[\"a\"] expect %s, got: %s", "c", configMap.Data["a"])
 		return
 	}
-	updateCallbackFuncErr = nil
+	errUpdateCallbackFunc = nil
 }

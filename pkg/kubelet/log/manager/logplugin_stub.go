@@ -14,7 +14,7 @@ import (
 	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/logplugin/v1beta1"
 )
 
-// Stub implementation for LogPlugin.
+// LogPluginStub is a stub implementation for LogPlugin.
 type LogPluginStub struct {
 	socketPath string
 	name       string
@@ -112,6 +112,7 @@ func (p *LogPluginStub) Register(kubeletEndpoint, logPluginName string) error {
 	return nil
 }
 
+// AddConfig is a stub implementation of LogPluginServer
 func (p *LogPluginStub) AddConfig(ctx context.Context, r *pluginapi.AddConfigRequest) (*pluginapi.AddConfigResponse, error) {
 	p.configs[r.Config.Metadata.Name] = r.Config
 	return &pluginapi.AddConfigResponse{
@@ -119,6 +120,7 @@ func (p *LogPluginStub) AddConfig(ctx context.Context, r *pluginapi.AddConfigReq
 	}, nil
 }
 
+// DelConfig is a stub implementation of LogPluginServer
 func (p *LogPluginStub) DelConfig(ctx context.Context, r *pluginapi.DelConfigRequest) (*pluginapi.DelConfigResponse, error) {
 	delete(p.configs, r.Name)
 	return &pluginapi.DelConfigResponse{
@@ -130,6 +132,7 @@ func (p *LogPluginStub) setState(name string, state pluginapi.State) {
 	p.states[name] = state
 }
 
+// GetState is a stub implementation of LogPluginServer
 func (p *LogPluginStub) GetState(ctx context.Context, r *pluginapi.GetStateRequest) (*pluginapi.GetStateResponse, error) {
 	state, exists := p.states[r.Name]
 	if !exists {
@@ -140,6 +143,7 @@ func (p *LogPluginStub) GetState(ctx context.Context, r *pluginapi.GetStateReque
 	}, nil
 }
 
+// ListConfig is a stub implementation of LogPluginServer
 func (p *LogPluginStub) ListConfig(ctx context.Context, r *pluginapi.Empty) (*pluginapi.ListConfigResponse, error) {
 	configs := make([]*pluginapi.Config, 0, len(p.configs))
 	for _, config := range p.configs {

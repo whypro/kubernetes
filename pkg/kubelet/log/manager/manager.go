@@ -42,7 +42,8 @@ func (s *sourcesReadyStub) AddSource(source string) {}
 
 func (s *sourcesReadyStub) AllReady() bool { return true }
 
-type ManagerImpl struct {
+// LogManagerImpl is a implementation of Manager interface
+type LogManagerImpl struct {
 	kubeClient   clientset.Interface
 	recorder     record.EventRecorder
 	sourcesReady config.SourcesReady
@@ -63,6 +64,7 @@ type ManagerImpl struct {
 	volumeManager    volumemanager.VolumeManager
 }
 
+// NewLogPluginManagerImpl returns a instance of ManagerImpl
 func NewLogPluginManagerImpl(
 	kubeClient clientset.Interface,
 	recorder record.EventRecorder,
@@ -70,9 +72,9 @@ func NewLogPluginManagerImpl(
 	configMapManager configmap.Manager,
 	volumeManager volumemanager.VolumeManager,
 	policyStatusManager policy.LogStatusManager,
-) (Manager, error) {
+) (LogManager, error) {
 	socketDir, socketName := filepath.Split(pluginapi.KubeletSocket)
-	m := &ManagerImpl{
+	m := &LogManagerImpl{
 		kubeClient:          kubeClient,
 		recorder:            recorder,
 		sourcesReady:        &sourcesReadyStub{},
@@ -89,7 +91,7 @@ func NewLogPluginManagerImpl(
 	return m, nil
 }
 
-func (m *ManagerImpl) cleanUpDir(dir string) error {
+func (m *LogManagerImpl) cleanUpDir(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
 		return err
@@ -117,7 +119,8 @@ func (m *ManagerImpl) cleanUpDir(dir string) error {
 	return nil
 }
 
-func (m *ManagerImpl) Start(sourcesReady config.SourcesReady) error {
+// Start non-blocking starts the manager
+func (m *LogManagerImpl) Start(sourcesReady config.SourcesReady) error {
 	glog.V(2).Infof("starting log plugin manager")
 	m.sourcesReady = sourcesReady
 
@@ -167,7 +170,7 @@ func filterPods(allPods []*v1.Pod) []*v1.Pod {
 // 2. save config states to stateManager
 // 3. traversal all pods with log policy, diff configs between log policy configs and log plugin configs
 // 4. update configs from log policy to log plugin
-func (m *ManagerImpl) sync() {
+func (m *LogManagerImpl) sync() {
 	// if !m.sourcesReady.AllReady() {
 	// 	return
 	// }
@@ -233,7 +236,7 @@ func (m *ManagerImpl) sync() {
 	glog.V(7).Infof("log manager sync finished")
 }
 
-func (m *ManagerImpl) refreshPluginState(endpoint pluginEndpoint) error {
+func (m *LogManagerImpl) refreshPluginState(endpoint pluginEndpoint) error {
 	rsp, err := endpoint.listConfig()
 	if err != nil {
 		glog.Errorf("list configs from log plugin error, %v", err)
@@ -245,7 +248,7 @@ func (m *ManagerImpl) refreshPluginState(endpoint pluginEndpoint) error {
 	return nil
 }
 
-func (m *ManagerImpl) createPodLogDirSymLink(logVolumes policy.LogVolumesMap) error {
+func (m *LogManagerImpl) createPodLogDirSymLink(logVolumes policy.LogVolumesMap) error {
 	// create symlink for log volumes
 	// eg. /var/log/pods/<pod-uid>/<container-name>/<category>
 	// we should make dir /var/log/pods/<pod-uid>/<container-name> first and then create symlink <category>
@@ -272,7 +275,7 @@ func (m *ManagerImpl) createPodLogDirSymLink(logVolumes policy.LogVolumesMap) er
 }
 
 // Register registers a log plugin.
-func (m *ManagerImpl) Register(ctx context.Context, r *pluginapi.RegisterRequest) (*pluginapi.Empty, error) {
+func (m *LogManagerImpl) Register(ctx context.Context, r *pluginapi.RegisterRequest) (*pluginapi.Empty, error) {
 	glog.Infof("got registration request from log plugin: %s, endpoint: %s", r.Name, r.Endpoint)
 	if r.Version != pluginapi.Version {
 		err := fmt.Errorf("invalid version: %s, expected: %s", r.Version, pluginapi.Version)
@@ -285,7 +288,7 @@ func (m *ManagerImpl) Register(ctx context.Context, r *pluginapi.RegisterRequest
 	return &pluginapi.Empty{}, nil
 }
 
-func (m *ManagerImpl) addEndpoint(r *pluginapi.RegisterRequest) {
+func (m *LogManagerImpl) addEndpoint(r *pluginapi.RegisterRequest) {
 	glog.Infof("endpoint %q is registering", r.Name)
 	socketPath := filepath.Join(pluginapi.LogPluginPath, r.Endpoint)
 	e, err := newEndpointImpl(socketPath, r.Name)
@@ -304,7 +307,7 @@ func (m *ManagerImpl) addEndpoint(r *pluginapi.RegisterRequest) {
 	glog.Infof("endpoint %q is registered, socket path: %s", r.Name, socketPath)
 }
 
-func (m *ManagerImpl) buildPodLogVolumes(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (policy.LogVolumesMap, error) {
+func (m *LogManagerImpl) buildPodLogVolumes(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (policy.LogVolumesMap, error) {
 	logVolumes := make(policy.LogVolumesMap)
 	glog.V(7).Infof("getting mounted volume for pod: %q", format.Pod(pod))
 	podVolumes := m.volumeManager.GetMountedVolumesForPod(volumeutil.GetUniquePodName(pod))
@@ -331,7 +334,7 @@ func (m *ManagerImpl) buildPodLogVolumes(pod *v1.Pod, podLogPolicy *api.PodLogPo
 	return logVolumes, nil
 }
 
-func (m *ManagerImpl) buildPodLogConfigMapKeys(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (sets.String, error) {
+func (m *LogManagerImpl) buildPodLogConfigMapKeys(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (sets.String, error) {
 	// configMap key set
 	configMapKeys := sets.NewString()
 	for _, containerLogPolicy := range podLogPolicy.ContainerLogPolicies {
@@ -346,7 +349,7 @@ func (m *ManagerImpl) buildPodLogConfigMapKeys(pod *v1.Pod, podLogPolicy *api.Po
 	return configMapKeys, nil
 }
 
-func (m *ManagerImpl) buildPodLogConfigs(pod *v1.Pod, podLogPolicy *api.PodLogPolicy, podLogVolumes policy.LogVolumesMap) (logConfigsMap, error) {
+func (m *LogManagerImpl) buildPodLogConfigs(pod *v1.Pod, podLogPolicy *api.PodLogPolicy, podLogVolumes policy.LogVolumesMap) (logConfigsMap, error) {
 	// configName -> PluginLogConfig
 	logConfigs := make(logConfigsMap)
 	for _, containerLogPolicy := range podLogPolicy.ContainerLogPolicies {
@@ -395,7 +398,7 @@ func (m *ManagerImpl) buildPodLogConfigs(pod *v1.Pod, podLogPolicy *api.PodLogPo
 	return logConfigs, nil
 }
 
-func (m *ManagerImpl) pushPluginConfigs(podUID k8stypes.UID, endpoint pluginEndpoint, logConfigs logConfigsMap) error {
+func (m *LogManagerImpl) pushPluginConfigs(podUID k8stypes.UID, endpoint pluginEndpoint, logConfigs logConfigsMap) error {
 	// diff between logConfigs and podLogPolicyManager.logConfigs
 	// generate deleted config name set
 	configNames := sets.NewString()
@@ -431,7 +434,7 @@ func (m *ManagerImpl) pushPluginConfigs(podUID k8stypes.UID, endpoint pluginEndp
 	return nil
 }
 
-func (m *ManagerImpl) deletePluginConfigs(podUID k8stypes.UID, endpoint pluginEndpoint) error {
+func (m *LogManagerImpl) deletePluginConfigs(podUID k8stypes.UID, endpoint pluginEndpoint) error {
 	for configName := range m.pluginStatusManager.getLogConfigNames(podUID) {
 		// invoke log plugin api to delete config
 		glog.Infof("calling log plugin to delete config for pod, config name: %s, pod uid: %s", configName, podUID)
@@ -445,7 +448,7 @@ func (m *ManagerImpl) deletePluginConfigs(podUID k8stypes.UID, endpoint pluginEn
 	return nil
 }
 
-func (m *ManagerImpl) refreshPodState(pod *v1.Pod) error {
+func (m *LogManagerImpl) refreshPodState(pod *v1.Pod) error {
 	glog.V(7).Infof("refresh pod state, pod: %q", format.Pod(pod))
 	podLogPolicy, err := util.GetPodLogPolicy(pod)
 	if err != nil {
@@ -483,7 +486,7 @@ func (m *ManagerImpl) refreshPodState(pod *v1.Pod) error {
 	return nil
 }
 
-func (m *ManagerImpl) removePodState(podUID k8stypes.UID) {
+func (m *LogManagerImpl) removePodState(podUID k8stypes.UID) {
 	m.policyStatusManager.RemoveCollectFinishedStatus(podUID)
 	m.policyStatusManager.RemoveConfigMapKeys(podUID)
 	// remove log volumes from podLogPolicyManager
@@ -492,7 +495,7 @@ func (m *ManagerImpl) removePodState(podUID k8stypes.UID) {
 	m.policyStatusManager.RemoveLogPolicy(podUID)
 }
 
-func (m *ManagerImpl) pushConfigs(pod *v1.Pod) error {
+func (m *LogManagerImpl) pushConfigs(pod *v1.Pod) error {
 	glog.V(7).Infof("push pod configs, pod: %q", format.Pod(pod))
 	logPolicy, exists := m.policyStatusManager.GetLogPolicy(pod.UID)
 	if !exists {
@@ -529,7 +532,8 @@ func (m *ManagerImpl) pushConfigs(pod *v1.Pod) error {
 	return nil
 }
 
-func (m *ManagerImpl) CreateLogPolicy(pod *v1.Pod) error {
+// CreateLogPolicy create pod log policy info
+func (m *LogManagerImpl) CreateLogPolicy(pod *v1.Pod) error {
 	// ignore pod without log policy
 	if !util.IsPodLogPolicyExists(pod) {
 		return nil
@@ -562,7 +566,7 @@ func (m *ManagerImpl) CreateLogPolicy(pod *v1.Pod) error {
 	return nil
 }
 
-func (m *ManagerImpl) exceedTerminationGracePeriod(pod *v1.Pod) bool {
+func (m *LogManagerImpl) exceedTerminationGracePeriod(pod *v1.Pod) bool {
 	// check TerminationGracePeriodSeconds
 	if pod.DeletionTimestamp != nil && pod.DeletionGracePeriodSeconds != nil {
 		now := time.Now()
@@ -576,7 +580,8 @@ func (m *ManagerImpl) exceedTerminationGracePeriod(pod *v1.Pod) bool {
 	return false
 }
 
-func (m *ManagerImpl) RemoveLogPolicy(pod *v1.Pod) error {
+// RemoveLogPolicy removes pod log policy info
+func (m *LogManagerImpl) RemoveLogPolicy(pod *v1.Pod) error {
 	if pod == nil {
 		// pod is deleted, but containers may be running
 		return nil
@@ -620,7 +625,7 @@ func (m *ManagerImpl) RemoveLogPolicy(pod *v1.Pod) error {
 	return nil
 }
 
-func (m *ManagerImpl) isCollectFinished(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (bool, string) {
+func (m *LogManagerImpl) isCollectFinished(pod *v1.Pod, podLogPolicy *api.PodLogPolicy) (bool, string) {
 	collectFinished := m.getPluginCollectState(pod.UID, podLogPolicy)
 	if !collectFinished {
 		if podLogPolicy.SafeDeletionEnabled {
@@ -635,7 +640,7 @@ func (m *ManagerImpl) isCollectFinished(pod *v1.Pod, podLogPolicy *api.PodLogPol
 	return true, ""
 }
 
-func (m *ManagerImpl) getPluginCollectState(podUID k8stypes.UID, podLogPolicy *api.PodLogPolicy) bool {
+func (m *LogManagerImpl) getPluginCollectState(podUID k8stypes.UID, podLogPolicy *api.PodLogPolicy) bool {
 	configNames := m.pluginStatusManager.getLogConfigNames(podUID)
 	if len(configNames) == 0 {
 		glog.V(7).Infof("no config found by pod uid: %s", podUID)
@@ -662,7 +667,7 @@ func (m *ManagerImpl) getPluginCollectState(podUID k8stypes.UID, podLogPolicy *a
 	return true
 }
 
-func (m *ManagerImpl) getLogPluginEndpoint(logPluginName string) (pluginEndpoint, error) {
+func (m *LogManagerImpl) getLogPluginEndpoint(logPluginName string) (pluginEndpoint, error) {
 	ep, exists := m.logPlugins[logPluginName]
 	if !exists {
 		return nil, fmt.Errorf("invalid endpoint %s", logPluginName)
@@ -670,7 +675,7 @@ func (m *ManagerImpl) getLogPluginEndpoint(logPluginName string) (pluginEndpoint
 	return ep, nil
 }
 
-func (m *ManagerImpl) onConfigMapUpdate(configMap *v1.ConfigMap) {
+func (m *LogManagerImpl) onConfigMapUpdate(configMap *v1.ConfigMap) {
 	configMapKey := buildConfigMapKey(configMap.Namespace, configMap.Name)
 	glog.Infof("configMap %q updated", configMapKey)
 
@@ -709,6 +714,7 @@ func (m *ManagerImpl) onConfigMapUpdate(configMap *v1.ConfigMap) {
 	}
 }
 
-func (m *ManagerImpl) IsCollectFinished(podUID k8stypes.UID) bool {
+// IsCollectFinished check if a pod log collecting is finished by pod uid
+func (m *LogManagerImpl) IsCollectFinished(podUID k8stypes.UID) bool {
 	return m.policyStatusManager.IsCollectFinished(podUID)
 }

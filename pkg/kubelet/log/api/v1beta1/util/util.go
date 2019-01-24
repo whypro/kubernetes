@@ -12,6 +12,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 )
 
+// IsPodLogPolicyExists checks if a pod have log policy annotation
 func IsPodLogPolicyExists(pod *v1.Pod) bool {
 	_, exists := pod.Annotations[v1beta1.PodLogPolicyLabelKey]
 	if exists {
@@ -20,6 +21,7 @@ func IsPodLogPolicyExists(pod *v1.Pod) bool {
 	return false
 }
 
+// GetPodLogPolicy gets log policy from a given pod
 func GetPodLogPolicy(pod *v1.Pod) (*v1beta1.PodLogPolicy, error) {
 	// get log policy from pod annotations
 	podLogPolicyLabelValue, exists := pod.Annotations[v1beta1.PodLogPolicyLabelKey]
@@ -37,6 +39,7 @@ func GetPodLogPolicy(pod *v1.Pod) (*v1beta1.PodLogPolicy, error) {
 	return podLogPolicy, nil
 }
 
+// GetPodLogConfigMapNames gets a config map name set from a given pod
 func GetPodLogConfigMapNames(pod *v1.Pod) sets.String {
 	// configMap name set
 	configMapNames := sets.NewString()

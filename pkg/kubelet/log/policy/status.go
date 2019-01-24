@@ -8,12 +8,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// LogStatusProvider provide to get pod log status
 type LogStatusProvider interface {
+	// IsCollectFinished check if a pod log collecting is finished by pod uid
 	IsCollectFinished(podUID k8stypes.UID) bool
 }
 
+// LogStatusManager manages all pod log policies, log volumes, log configs and log collecting status
 type LogStatusManager interface {
 	LogStatusProvider
+
 	UpdateCollectFinishedStatus(podUID k8stypes.UID, isFinished bool)
 	RemoveCollectFinishedStatus(podUID k8stypes.UID)
 	GetCollectFinishedStatus(podUID k8stypes.UID) (bool, bool)
@@ -32,6 +36,7 @@ type LogStatusManager interface {
 	GetLogVolumes(podUID k8stypes.UID) (LogVolumesMap, bool)
 }
 
+// LogVolume defines single log volume info of a pod
 type LogVolume struct {
 	VolumeName string
 	// path in container
@@ -45,7 +50,7 @@ type LogVolume struct {
 	LogDirPath string
 }
 
-// volumeName -> logVolume
+// LogVolumesMap is a map of volumeName -> logVolume
 type LogVolumesMap map[string]*LogVolume
 
 type policyStatusManager struct {
@@ -69,7 +74,8 @@ type policyStatusManager struct {
 	podLogCollectFinishedStatus map[k8stypes.UID]bool
 }
 
-func NewPolicyStatusManager() *policyStatusManager {
+// NewPolicyStatusManager return a instance of policyStatusManager
+func NewPolicyStatusManager() LogStatusManager {
 	return &policyStatusManager{
 		podLogPolicies:              make(map[k8stypes.UID]*api.PodLogPolicy),
 		podLogVolumes:               make(map[k8stypes.UID]LogVolumesMap),

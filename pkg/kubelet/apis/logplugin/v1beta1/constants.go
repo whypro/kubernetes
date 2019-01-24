@@ -17,8 +17,9 @@ limitations under the License.
 package logplugin
 
 const (
-	// Current version of the API supported by kubelet
-	Version       = "v1beta1"
+	// Version is the current version of the API supported by kubelet
+	Version = "v1beta1"
+	// LogPluginPath is the parent path of the Kubelet registry socket
 	LogPluginPath = "/var/lib/kubelet/log-plugins/"
 	// KubeletSocket is the path of the Kubelet registry socket
 	KubeletSocket = LogPluginPath + "kubelet.sock"

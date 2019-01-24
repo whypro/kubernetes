@@ -163,6 +163,8 @@ pkg/kubelet/apis/deviceplugin/v1alpha
 pkg/kubelet/apis/deviceplugin/v1beta1
 pkg/kubelet/apis/kubeletconfig
 pkg/kubelet/apis/kubeletconfig/v1beta1
+pkg/kubelet/apis/logplugin/v1alpha1
+pkg/kubelet/apis/logplugin/v1beta1
 pkg/kubelet/apis/pluginregistration/v1alpha1
 pkg/kubelet/cadvisor
 pkg/kubelet/cadvisor/testing
@@ -192,6 +194,8 @@ pkg/kubelet/images
 pkg/kubelet/kuberuntime
 pkg/kubelet/leaky
 pkg/kubelet/lifecycle
+pkg/kubelet/log/api/v1alpha1
+pkg/kubelet/log/api/v1beta1
 pkg/kubelet/metrics
 pkg/kubelet/pleg
 pkg/kubelet/pod

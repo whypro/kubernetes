@@ -16,10 +16,12 @@ type configMapKey struct {
 	name      string
 }
 
+// String returns a string of configmap key object in format "namespace/name"
 func (cmk *configMapKey) String() string {
 	return fmt.Sprintf("%s/%s", cmk.namespace, cmk.name)
 }
 
+// Parse parses a configmap key string to object
 func (cmk *configMapKey) Parse(keyStr string) error {
 	token := strings.Split(keyStr, "/")
 	if len(token) != 2 {
@@ -38,6 +40,7 @@ type configMapCacheObject struct {
 
 type callbackFunc func(configMap *v1.ConfigMap)
 
+// ConfigMapWatcher syncs between configmap.Manager and cache. If changes happen, invoke callback function
 type ConfigMapWatcher struct {
 	mutex              sync.RWMutex
 	cache              map[string]*configMapCacheObject
@@ -46,6 +49,7 @@ type ConfigMapWatcher struct {
 	updateCallbackFunc callbackFunc
 }
 
+// NewConfigMapWatcher create a instance of ConfigMapWatcher
 func NewConfigMapWatcher(
 	configMapManager configmap.Manager,
 	updateCallbackFunc callbackFunc,
@@ -59,7 +63,7 @@ func NewConfigMapWatcher(
 	return w
 }
 
-// add new, delete old, update exists
+// Sync add new, delete old, update exists configmap in cache
 func (w *ConfigMapWatcher) Sync(keyStrs sets.String) {
 	w.mutex.RLock()
 	added := keyStrs.Difference(w.cacheKeySet)

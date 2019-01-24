@@ -121,7 +121,7 @@ var testcases = []struct {
 }
 
 func TestCollectFinished(t *testing.T) {
-	manager := &ManagerImpl{
+	manager := &LogManagerImpl{
 		logPlugins:          make(map[string]pluginEndpoint),
 		policyStatusManager: policy.NewPolicyStatusManager(),
 		pluginStatusManager: newPluginStatusManager(),

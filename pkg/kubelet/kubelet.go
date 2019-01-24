@@ -1178,7 +1178,7 @@ type Kubelet struct {
 	*stats.StatsProvider
 
 	// Log Plugin Manager
-	logPluginManager logmanager.Manager
+	logPluginManager logmanager.LogManager
 
 	// This flag, if set, instructs the kubelet to keep volumes from terminated pods mounted to the node.
 	// This can be useful for debugging volume related issues.
