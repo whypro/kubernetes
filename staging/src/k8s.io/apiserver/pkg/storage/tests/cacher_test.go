@@ -724,7 +724,7 @@ func TestCacherListerWatcher(t *testing.T) {
 	}
 	pl, ok := obj.(*example.PodList)
 	if !ok {
-		t.Fatalf("Expected PodList but got %t", pl)
+		t.Fatalf("Expected PodList but got %v", pl)
 	}
 	if len(pl.Items) != 3 {
 		t.Errorf("Expected PodList of length 3 but got %d", len(pl.Items))
@@ -753,7 +753,7 @@ func TestCacherListerWatcherPagination(t *testing.T) {
 	}
 	limit1, ok := obj1.(*example.PodList)
 	if !ok {
-		t.Fatalf("Expected PodList but got %t", limit1)
+		t.Fatalf("Expected PodList but got %v", limit1)
 	}
 	if len(limit1.Items) != 2 {
 		t.Errorf("Expected PodList of length 2 but got %d", len(limit1.Items))
@@ -767,7 +767,7 @@ func TestCacherListerWatcherPagination(t *testing.T) {
 	}
 	limit2, ok := obj2.(*example.PodList)
 	if !ok {
-		t.Fatalf("Expected PodList but got %t", limit2)
+		t.Fatalf("Expected PodList but got %v", limit2)
 	}
 	if limit2.Continue != "" {
 		t.Errorf("Expected list not to have Continue, but got %s", limit1.Continue)
