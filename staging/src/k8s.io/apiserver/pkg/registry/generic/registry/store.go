@@ -1264,11 +1264,6 @@ func (e *Store) CompleteWithOptions(options *generic.StoreOptions) error {
 		return e.KeyFunc(genericapirequest.NewContext(), accessor.GetName())
 	}
 
-	triggerFunc := options.TriggerFunc
-	if triggerFunc == nil {
-		triggerFunc = storage.NoTriggerPublisher
-	}
-
 	if e.DeleteCollectionWorkers == 0 {
 		e.DeleteCollectionWorkers = opts.DeleteCollectionWorkers
 	}
@@ -1295,7 +1290,7 @@ func (e *Store) CompleteWithOptions(options *generic.StoreOptions) error {
 			e.NewFunc,
 			e.NewListFunc,
 			attrFunc,
-			triggerFunc,
+			options.TriggerFunc,
 		)
 		if err != nil {
 			return err
