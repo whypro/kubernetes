@@ -50,7 +50,7 @@ const cpuManagerStateFileName = "cpu_manager_state"
 // Manager interface provides methods for Kubelet to manage pod cpus.
 type Manager interface {
 	// Start is called during Kubelet initialization.
-	Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService)
+	Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) error
 
 	// AddContainer is called between container create and container start
 	// so that initial CPU affinity settings can be written through to the
@@ -129,7 +129,10 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		// exclusively allocated.
 		reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
 		numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
-		policy = NewStaticPolicy(topo, numReservedCPUs)
+		policy, err = NewStaticPolicy(topo, numReservedCPUs)
+		if err != nil {
+			return nil, fmt.Errorf("new static policy error: %v", err)
+		}
 
 	default:
 		klog.Errorf("[cpumanager] Unknown policy \"%s\", falling back to default policy \"%s\"", cpuPolicyName, PolicyNone)
@@ -151,7 +154,7 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 	return manager, nil
 }
 
-func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
+func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) error {
 	klog.Infof("[cpumanager] starting with %s policy", m.policy.Name())
 	klog.Infof("[cpumanager] reconciling every %v", m.reconcilePeriod)
 
@@ -159,11 +162,17 @@ func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodS
 	m.podStatusProvider = podStatusProvider
 	m.containerRuntime = containerRuntime
 
-	m.policy.Start(m.state)
+	err := m.policy.Start(m.state)
+	if err != nil {
+		klog.Errorf("[cpumanager] policy start error: %v", err)
+		return err
+	}
+
 	if m.policy.Name() == string(PolicyNone) {
-		return
+		return nil
 	}
 	go wait.Until(func() { m.reconcileState() }, m.reconcilePeriod, wait.NeverStop)
+	return nil
 }
 
 func (m *manager) AddContainer(p *v1.Pod, c *v1.Container, containerID string) error {

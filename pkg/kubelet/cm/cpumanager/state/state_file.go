@@ -42,7 +42,7 @@ type stateFile struct {
 }
 
 // NewFileState creates new State for keeping track of cpu/pod assignment with file backend
-func NewFileState(filePath string, policyName string) State {
+func NewFileState(filePath string, policyName string) (State, error) {
 	stateFile := &stateFile{
 		stateFilePath: filePath,
 		cache:         NewMemoryState(),
@@ -51,13 +51,14 @@ func NewFileState(filePath string, policyName string) State {
 
 	if err := stateFile.tryRestoreState(); err != nil {
 		// could not restore state, init new state file
-		msg := fmt.Sprintf("[cpumanager] state file: unable to restore state from disk (%s)\n", err.Error()) +
-			"Panicking because we cannot guarantee sane CPU affinity for existing containers.\n" +
-			fmt.Sprintf("Please drain this node and delete the CPU manager state file \"%s\" before restarting Kubelet.", stateFile.stateFilePath)
-		panic(msg)
+		klog.Errorf("[cpumanager] state file: unable to restore state from disk (%v)"+
+			" We cannot guarantee sane CPU affinity for existing containers."+
+			" Please drain this node and delete the CPU manager state file \"%s\" before restarting Kubelet.",
+			err, stateFile.stateFilePath)
+		return nil, err
 	}
 
-	return stateFile
+	return stateFile, nil
 }
 
 // tryRestoreState tries to read state file, upon any error,
@@ -78,7 +79,10 @@ func (sf *stateFile) tryRestoreState() error {
 
 	// If the state file does not exist or has zero length, write a new file.
 	if os.IsNotExist(err) || len(content) == 0 {
-		sf.storeState()
+		err := sf.storeState()
+		if err != nil {
+			return err
+		}
 		klog.Infof("[cpumanager] state file: created new state file \"%s\"", sf.stateFilePath)
 		return nil
 	}
@@ -123,7 +127,7 @@ func (sf *stateFile) tryRestoreState() error {
 }
 
 // saves state to a file, caller is responsible for locking
-func (sf *stateFile) storeState() {
+func (sf *stateFile) storeState() error {
 	var content []byte
 	var err error
 
@@ -138,13 +142,13 @@ func (sf *stateFile) storeState() {
 	}
 
 	if content, err = json.Marshal(data); err != nil {
-		panic("[cpumanager] state file: could not serialize state to json")
+		return fmt.Errorf("[cpumanager] state file: could not serialize state to json")
 	}
 
 	if err = ioutil.WriteFile(sf.stateFilePath, content, 0644); err != nil {
-		panic("[cpumanager] state file not written")
+		return fmt.Errorf("[cpumanager] state file not written")
 	}
-	return
+	return nil
 }
 
 func (sf *stateFile) GetCPUSet(containerID string) (cpuset.CPUSet, bool) {
@@ -179,33 +183,48 @@ func (sf *stateFile) SetCPUSet(containerID string, cset cpuset.CPUSet) {
 	sf.Lock()
 	defer sf.Unlock()
 	sf.cache.SetCPUSet(containerID, cset)
-	sf.storeState()
+	err := sf.storeState()
+	if err != nil {
+		klog.Warningf("store state to checkpoint error: %v", err)
+	}
 }
 
 func (sf *stateFile) SetDefaultCPUSet(cset cpuset.CPUSet) {
 	sf.Lock()
 	defer sf.Unlock()
 	sf.cache.SetDefaultCPUSet(cset)
-	sf.storeState()
+	err := sf.storeState()
+	if err != nil {
+		klog.Warningf("store state to checkpoint error: %v", err)
+	}
 }
 
 func (sf *stateFile) SetCPUAssignments(a ContainerCPUAssignments) {
 	sf.Lock()
 	defer sf.Unlock()
 	sf.cache.SetCPUAssignments(a)
-	sf.storeState()
+	err := sf.storeState()
+	if err != nil {
+		klog.Warningf("store state to checkpoint error: %v", err)
+	}
 }
 
 func (sf *stateFile) Delete(containerID string) {
 	sf.Lock()
 	defer sf.Unlock()
 	sf.cache.Delete(containerID)
-	sf.storeState()
+	err := sf.storeState()
+	if err != nil {
+		klog.Warningf("store state to checkpoint error: %v", err)
+	}
 }
 
 func (sf *stateFile) ClearState() {
 	sf.Lock()
 	defer sf.Unlock()
 	sf.cache.ClearState()
-	sf.storeState()
+	err := sf.storeState()
+	if err != nil {
+		klog.Warningf("store state to checkpoint error: %v", err)
+	}
 }

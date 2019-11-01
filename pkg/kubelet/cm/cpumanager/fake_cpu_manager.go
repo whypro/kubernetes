@@ -27,8 +27,9 @@ type fakeManager struct {
 	state state.State
 }
 
-func (m *fakeManager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
+func (m *fakeManager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) error {
 	klog.Info("[fake cpumanager] Start()")
+	return nil
 }
 
 func (m *fakeManager) Policy() Policy {

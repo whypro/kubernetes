@@ -38,11 +38,10 @@ type staticPolicyTest struct {
 	expErr          error
 	expCPUAlloc     bool
 	expCSet         cpuset.CPUSet
-	expPanic        bool
 }
 
 func TestStaticPolicyName(t *testing.T) {
-	policy := NewStaticPolicy(topoSingleSocketHT, 1)
+	policy, _ := NewStaticPolicy(topoSingleSocketHT, 1)
 
 	policyName := policy.Name()
 	if policyName != "static" {
@@ -76,7 +75,7 @@ func TestStaticPolicyStart(t *testing.T) {
 			numReservedCPUs: 2,
 			stAssignments:   state.ContainerCPUAssignments{},
 			stDefaultCPUSet: cpuset.NewCPUSet(0, 1),
-			expPanic:        true,
+			expErr:          fmt.Errorf("not all reserved cpus: \"0,6\" are present in defaultCpuSet: \"0-1\""),
 		},
 		{
 			description: "assigned core 2 is still present in available cpuset",
@@ -85,7 +84,7 @@ func TestStaticPolicyStart(t *testing.T) {
 				"0": cpuset.NewCPUSet(0, 1, 2),
 			},
 			stDefaultCPUSet: cpuset.NewCPUSet(2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
-			expPanic:        true,
+			expErr:          fmt.Errorf("container id: 0 cpuset: \"0-2\" overlaps with default cpuset \"2-11\""),
 		},
 		{
 			description: "core 12 is not present in topology but is in state cpuset",
@@ -95,7 +94,7 @@ func TestStaticPolicyStart(t *testing.T) {
 				"1": cpuset.NewCPUSet(3, 4),
 			},
 			stDefaultCPUSet: cpuset.NewCPUSet(5, 6, 7, 8, 9, 10, 11, 12),
-			expPanic:        true,
+			expErr:          fmt.Errorf("current set of available CPUs \"0-11\" doesn't match with CPUs in state \"0-12\""),
 		},
 		{
 			description: "core 11 is present in topology but is not in state cpuset",
@@ -105,26 +104,25 @@ func TestStaticPolicyStart(t *testing.T) {
 				"1": cpuset.NewCPUSet(3, 4),
 			},
 			stDefaultCPUSet: cpuset.NewCPUSet(5, 6, 7, 8, 9, 10),
-			expPanic:        true,
+			expErr:          fmt.Errorf("current set of available CPUs \"0-11\" doesn't match with CPUs in state \"0-10\""),
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.description, func(t *testing.T) {
-			defer func() {
-				if err := recover(); err != nil {
-					if !testCase.expPanic {
-						t.Errorf("unexpected panic occurred: %q", err)
-					}
-				} else if testCase.expPanic {
-					t.Error("expected panic doesn't occurred")
-				}
-			}()
-			policy := NewStaticPolicy(testCase.topo, testCase.numReservedCPUs).(*staticPolicy)
+			p, _ := NewStaticPolicy(testCase.topo, testCase.numReservedCPUs)
+			policy := p.(*staticPolicy)
 			st := &mockState{
 				assignments:   testCase.stAssignments,
 				defaultCPUSet: testCase.stDefaultCPUSet,
 			}
-			policy.Start(st)
+			err := policy.Start(st)
+			if !reflect.DeepEqual(err, testCase.expErr) {
+				t.Errorf("StaticPolicy Start() error (%v). expected error: %v but got: %v",
+					testCase.description, testCase.expErr, err)
+			}
+			if err != nil {
+				return
+			}
 
 			if !testCase.stDefaultCPUSet.IsEmpty() {
 				for cpuid := 1; cpuid < policy.topology.NumCPUs; cpuid++ {
@@ -403,7 +401,7 @@ func TestStaticPolicyAdd(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		policy := NewStaticPolicy(testCase.topo, testCase.numReservedCPUs)
+		policy, _ := NewStaticPolicy(testCase.topo, testCase.numReservedCPUs)
 
 		st := &mockState{
 			assignments:   testCase.stAssignments,
@@ -492,7 +490,7 @@ func TestStaticPolicyRemove(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		policy := NewStaticPolicy(testCase.topo, testCase.numReservedCPUs)
+		policy, _ := NewStaticPolicy(testCase.topo, testCase.numReservedCPUs)
 
 		st := &mockState{
 			assignments:   testCase.stAssignments,
