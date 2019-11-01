@@ -44,7 +44,10 @@ func TestFileToCheckpointCompatibility(t *testing.T) {
 	// ensure testing state is removed after testing
 	defer os.Remove(statePath)
 
-	fileState := NewFileState(statePath, "none")
+	fileState, err := NewFileState(statePath, "none")
+	if err != nil {
+		t.Fatalf("could not new file state: %v", err)
+	}
 
 	fileState.SetDefaultCPUSet(state.defaultCPUSet)
 	fileState.SetCPUAssignments(state.assignments)
@@ -74,7 +77,10 @@ func TestCheckpointToFileCompatibility(t *testing.T) {
 	checkpointState.SetDefaultCPUSet(state.defaultCPUSet)
 	checkpointState.SetCPUAssignments(state.assignments)
 
-	restoredState := NewFileState(path.Join(testingDir, compatibilityTestingCheckpoint), "none")
+	restoredState, err := NewFileState(path.Join(testingDir, compatibilityTestingCheckpoint), "none")
+	if err != nil {
+		t.Fatalf("could not new file state: %v", err)
+	}
 
 	AssertStateEqual(t, restoredState, state)
 }
