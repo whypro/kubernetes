@@ -92,7 +92,8 @@ func (p *mockPolicy) Name() string {
 	return "mock"
 }
 
-func (p *mockPolicy) Start(s state.State) {
+func (p *mockPolicy) Start(s state.State) error {
+	return p.err
 }
 
 func (p *mockPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Container, containerID string) error {
@@ -189,7 +190,7 @@ func makeMultiContainerPod(initCPUs, appCPUs []struct{ request, limit string }) 
 }
 
 func TestCPUManagerAdd(t *testing.T) {
-	testPolicy := NewStaticPolicy(
+	testPolicy, _ := NewStaticPolicy(
 		&topology.CPUTopology{
 			NumCPUs:    4,
 			NumSockets: 1,

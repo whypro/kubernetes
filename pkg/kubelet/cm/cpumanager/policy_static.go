@@ -89,7 +89,7 @@ var _ Policy = &staticPolicy{}
 // NewStaticPolicy returns a CPU manager policy that does not change CPU
 // assignments for exclusively pinned guaranteed containers after the main
 // container process starts.
-func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, affinity topologymanager.Store) Policy {
+func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, affinity topologymanager.Store) (Policy, error) {
 	allCPUs := topology.CPUDetails.CPUs()
 	// takeByTopology allocates CPUs associated with low-numbered cores from
 	// allCPUs.
@@ -99,7 +99,8 @@ func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, affini
 	reserved, _ := takeByTopology(topology, allCPUs, numReservedCPUs)
 
 	if reserved.Size() != numReservedCPUs {
-		panic(fmt.Sprintf("[cpumanager] unable to reserve the required amount of CPUs (size of %s did not equal %d)", reserved, numReservedCPUs))
+		err := fmt.Errorf("[cpumanager] unable to reserve the required amount of CPUs (size of %s did not equal %d)", reserved, numReservedCPUs)
+		return nil, err
 	}
 
 	klog.Infof("[cpumanager] reserved %d CPUs (\"%s\") not available for exclusive assignment", reserved.Size(), reserved)
@@ -109,18 +110,19 @@ func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, affini
 		reserved:     reserved,
 		containerMap: newContainerMap(),
 		affinity:     affinity,
-	}
+	}, nil
 }
 
 func (p *staticPolicy) Name() string {
 	return string(PolicyStatic)
 }
 
-func (p *staticPolicy) Start(s state.State) {
+func (p *staticPolicy) Start(s state.State) error {
 	if err := p.validateState(s); err != nil {
-		klog.Errorf("[cpumanager] static policy invalid state: %s\n", err.Error())
-		panic("[cpumanager] - please drain node and remove policy state file")
+		klog.Errorf("[cpumanager] static policy invalid state: %s, please drain node and remove policy state file", err.Error())
+		return err
 	}
+	return nil
 }
 
 func (p *staticPolicy) validateState(s state.State) error {
