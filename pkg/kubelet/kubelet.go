@@ -1416,16 +1416,8 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	// Start volume manager
 	go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)
 
-	if kl.kubeClient != nil {
-		// Start syncing node status immediately, this may set up things the runtime needs to run.
-		go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
-		go kl.fastStatusUpdateOnce()
+	go kl.fastStatusUpdateOnce()
 
-		// start syncing lease
-		if utilfeature.DefaultFeatureGate.Enabled(features.NodeLease) {
-			go kl.nodeLeaseController.Run(wait.NeverStop)
-		}
-	}
 	go wait.Until(kl.updateRuntimeUp, 5*time.Second, wait.NeverStop)
 
 	// Start loop to sync iptables util rules
@@ -1444,6 +1436,16 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	// Start syncing RuntimeClasses if enabled.
 	if kl.runtimeClassManager != nil {
 		kl.runtimeClassManager.Start(wait.NeverStop)
+	}
+
+	if kl.kubeClient != nil {
+		// Start syncing node status
+		go wait.Until(kl.syncNodeStatus, kl.nodeStatusUpdateFrequency, wait.NeverStop)
+
+		// start syncing lease
+		if utilfeature.DefaultFeatureGate.Enabled(features.NodeLease) {
+			go kl.nodeLeaseController.Run(wait.NeverStop)
+		}
 	}
 
 	// Start the pod lifecycle event generator.
