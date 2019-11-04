@@ -1,0 +1,138 @@
+variables:
+  GO_PROJECT: k8s.io/kubernetes
+
+before_script:
+  - mkdir -p $GOPATH/src/${GO_PROJECT%/*} ./rpm ./bin
+  - ln -s $CI_PROJECT_DIR $GOPATH/src/$GO_PROJECT
+  - cd $GOPATH/src/$GO_PROJECT
+
+stages:
+  - verify
+  - test
+  - build
+  - release
+  - upload
+
+run-verify:
+  stage: verify
+  image: harbor-htj.srv.yiran.com/k8s/kube-cross:v1.12.12-1
+  tags:
+    - gcc
+  script:
+    - make verify WHAT="gofmt imports"
+  allow_failure: false
+
+run-unit-test:
+  stage: test
+  image: harbor-htj.srv.yiran.com/k8s/kube-cross:v1.12.12-1
+  tags:
+    - gcc
+  script:
+    - ./release-pdd/run-test.sh
+  allow_failure: false
+
+build-binaries:
+  stage: build
+  image: harbor-htj.srv.yiran.com/k8s/kube-cross:v1.12.12-1
+  tags:
+    - golang
+  script:
+    - ./release-pdd/build-bin.sh
+  only:
+    - /^v.*$/
+  except:
+    - branches
+  artifacts:
+    paths:
+      - ./bin/*
+    expire_in: 1 day
+
+release-apiserver-image:
+  variables:
+    IMAGE_PACKAGE_NAME: kube/kube-apiserver
+  stage: release
+  tags:
+    - image
+  script:
+    - ./release-pdd/gen-dockerfile.sh kube-apiserver
+  only:
+    - /^v.*$/
+  except:
+    - branches
+  dependencies:
+    - build-binaries
+
+release-controller-manager-image:
+  variables:
+    IMAGE_PACKAGE_NAME: kube/kube-controller-manager
+  stage: release
+  tags:
+    - image
+  script:
+    - ./release-pdd/gen-dockerfile.sh kube-controller-manager
+  only:
+    - /^v.*$/
+  except:
+    - branches
+  dependencies:
+    - build-binaries
+
+release-scheduler-image:
+  variables:
+    IMAGE_PACKAGE_NAME: kube/kube-scheduler
+  stage: release
+  tags:
+    - image
+  script:
+    - ./release-pdd/gen-dockerfile.sh kube-scheduler
+  only:
+    - /^v.*$/
+  except:
+    - branches
+  dependencies:
+    - build-binaries
+
+release-proxy-image:
+  variables:
+    IMAGE_PACKAGE_NAME: kube/kube-proxy
+  stage: release
+  tags:
+    - image
+  script:
+    - ./release-pdd/gen-dockerfile.sh kube-proxy
+  only:
+    - /^v.*$/
+  except:
+    - branches
+  dependencies:
+    - build-binaries
+
+build-rpm:
+  image: harbor-htj.srv.yiran.com/k8s/kubernetes-rpm-builder:1.0.0
+  stage: release
+  tags:
+    - golang
+  script:
+    - ./release-pdd/build-rpm.sh
+  only:
+    - /^v.*$/
+  except:
+    - branches
+  artifacts:
+    paths:
+      - ./rpm/*
+    expire_in: 1 day
+
+upload-rpm:
+  image: harbor-htj.srv.yiran.com/k8s/kubernetes-rpm-builder:1.0.0
+  stage: upload
+  tags:
+    - golang
+  script:
+    - ./release-pdd/upload-rpm.sh
+  only:
+    - /^v.*$/
+  except:
+    - branches
+  dependencies:
+    - build-rpm
