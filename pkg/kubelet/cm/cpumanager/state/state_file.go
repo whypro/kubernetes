@@ -51,12 +51,11 @@ func NewFileState(filePath string, policyName string) (State, error) {
 	}
 
 	if err := stateFile.tryRestoreState(); err != nil {
+		// TODO: panicking because we cannot guarantee sane CPU affinity for existing containers?
+		klog.Errorf("[cpumanager] state file: unable to restore state from disk (%v)", err)
 		// could not restore state, init new state file
-		msg := fmt.Sprintf("[cpumanager] state file: unable to restore state from disk (%s)\n", err.Error()) +
-			"Panicking because we cannot guarantee sane CPU affinity for existing containers.\n" +
-			fmt.Sprintf("Please drain this node and delete the CPU manager state file \"%s\" before restarting Kubelet.", stateFile.stateFilePath)
-		klog.Error(msg)
-		return nil, err
+		stateFile.ClearState()
+		return stateFile, nil
 	}
 
 	return stateFile, nil

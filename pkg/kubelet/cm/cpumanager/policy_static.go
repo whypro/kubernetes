@@ -120,7 +120,8 @@ func (p *staticPolicy) Name() string {
 func (p *staticPolicy) Start(s state.State) error {
 	err := p.validateState(s)
 	if err != nil {
-		klog.Errorf("[cpumanager] static policy invalid state: %s, please drain node and remove policy state file", err.Error())
+		klog.Errorf("[cpumanager] static policy invalid state: %v", err)
+		// if validating failed, clear state and set all cpus to shared pool
 		s.ClearState()
 		allCPUs := p.topology.CPUDetails.CPUs()
 		s.SetDefaultCPUSet(allCPUs)
