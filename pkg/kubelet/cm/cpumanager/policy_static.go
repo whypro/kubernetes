@@ -120,7 +120,8 @@ func (p *staticPolicy) Name() string {
 func (p *staticPolicy) Start(s state.State) error {
 	if err := p.validateState(s); err != nil {
 		klog.Errorf("[cpumanager] static policy invalid state: %s, please drain node and remove policy state file", err.Error())
-		return err
+		s.ClearState()
+		return nil
 	}
 	return nil
 }
