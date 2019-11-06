@@ -51,10 +51,8 @@ func NewCheckpointState(stateDir, checkpointName, policyName string) (State, err
 	}
 
 	if err := stateCheckpoint.restoreState(); err != nil {
-		klog.Warningf("could not restore state from checkpoint %s, error: %v", path.Join(stateDir, checkpointName), err)
-		// could not restore state, init new state checkpoint
-		stateCheckpoint.ClearState()
-		return stateCheckpoint, nil
+		klog.Errorf("could not restore state from checkpoint %s, error: %v", path.Join(stateDir, checkpointName), err)
+		klog.Warningf("cpumanager cannot guarantee sane CPU affinity for existing containers unless drain this node and remove policy state file")
 	}
 
 	return stateCheckpoint, nil
