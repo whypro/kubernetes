@@ -573,12 +573,9 @@ func TestTimeBucketWatchersBasic(t *testing.T) {
 }
 
 func TestCacherNoLeakWithMultipleWatchers(t *testing.T) {
-	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchBookmark, true)()
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchBookmark, true)()
 	backingStorage := &dummyStorage{}
-	cacher, _, err := newTestCacher(backingStorage, 1000)
-	if err != nil {
-		t.Fatalf("Couldn't create cacher: %v", err)
-	}
+	cacher, _ := newTestCacher(backingStorage, 1000)
 	defer cacher.Stop()
 
 	// Wait until cacher is initialized.
