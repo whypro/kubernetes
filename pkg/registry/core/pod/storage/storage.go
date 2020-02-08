@@ -82,6 +82,7 @@ func NewStorage(optsGetter generic.RESTOptionsGetter, k client.ConnectionInfoGet
 		RESTOptions: optsGetter,
 		AttrFunc:    pod.GetAttrs,
 		TriggerFunc: map[string]storage.IndexerFunc{"spec.nodeName": pod.NodeNameTriggerFunc},
+		Indexers:    pod.Indexers(),
 	}
 	if err := store.CompleteWithOptions(options); err != nil {
 		panic(err) // TODO: Propagate error up
