@@ -555,7 +555,8 @@ func (c *Cacher) GetToList(ctx context.Context, key string, resourceVersion stri
 	pagingEnabled := utilfeature.DefaultFeatureGate.Enabled(features.APIListChunking)
 	hasContinuation := pagingEnabled && len(pred.Continue) > 0
 	hasLimit := pagingEnabled && pred.Limit > 0 && resourceVersion != "0"
-	if resourceVersion == "" || hasContinuation || hasLimit {
+	shouldListCache := !hasContinuation && resourceVersion == ""
+	if !shouldListCache && (resourceVersion == "" || hasContinuation || hasLimit) {
 		// If resourceVersion is not specified, serve it from underlying
 		// storage (for backward compatibility). If a continuation is
 		// requested, serve it from the underlying storage as well.
@@ -563,6 +564,13 @@ func (c *Cacher) GetToList(ctx context.Context, key string, resourceVersion stri
 		// since the watch cache isn't able to perform continuations, and
 		// limits are ignored when resource version is zero
 		return c.storage.GetToList(ctx, key, resourceVersion, pred, listObj)
+	}
+
+	if resourceVersion == "" {
+		resourceVersion, err := c.storage.GetLastRevision(ctx, key)
+		if err != nil {
+			return c.storage.GetToList(ctx, key, resourceVersion, pred, listObj)
+		}
 	}
 
 	// If resourceVersion is specified, serve it from cache.
@@ -598,6 +606,9 @@ func (c *Cacher) GetToList(ctx context.Context, key string, resourceVersion stri
 
 	obj, exists, readResourceVersion, err := c.watchCache.WaitUntilFreshAndGet(listRV, key, trace)
 	if err != nil {
+		if shouldListCache {
+			return c.storage.GetToList(ctx, key, resourceVersion, pred, listObj)
+		}
 		return err
 	}
 	trace.Step("Got from cache")
@@ -624,7 +635,8 @@ func (c *Cacher) List(ctx context.Context, key string, resourceVersion string, p
 	pagingEnabled := utilfeature.DefaultFeatureGate.Enabled(features.APIListChunking)
 	hasContinuation := pagingEnabled && len(pred.Continue) > 0
 	hasLimit := pagingEnabled && pred.Limit > 0 && resourceVersion != "0"
-	if resourceVersion == "" || hasContinuation || hasLimit {
+	shouldListCache := !hasContinuation && resourceVersion == ""
+	if !shouldListCache && (resourceVersion == "" || hasContinuation || hasLimit) {
 		// If resourceVersion is not specified, serve it from underlying
 		// storage (for backward compatibility). If a continuation is
 		// requested, serve it from the underlying storage as well.
@@ -632,6 +644,13 @@ func (c *Cacher) List(ctx context.Context, key string, resourceVersion string, p
 		// since the watch cache isn't able to perform continuations, and
 		// limits are ignored when resource version is zero.
 		return c.storage.List(ctx, key, resourceVersion, pred, listObj)
+	}
+
+	if resourceVersion == "" {
+		resourceVersion, err := c.storage.GetLastRevision(ctx, key)
+		if err != nil {
+			return c.storage.List(ctx, key, resourceVersion, pred, listObj)
+		}
 	}
 
 	// If resourceVersion is specified, serve it from cache.
@@ -667,6 +686,9 @@ func (c *Cacher) List(ctx context.Context, key string, resourceVersion string, p
 
 	objs, readResourceVersion, err := c.watchCache.WaitUntilFreshAndList(listRV, trace)
 	if err != nil {
+		if shouldListCache {
+			return c.storage.List(ctx, key, resourceVersion, pred, listObj)
+		}
 		return err
 	}
 	trace.Step(fmt.Sprintf("Listed %d items from cache", len(objs)))
@@ -713,6 +735,10 @@ func (c *Cacher) GuaranteedUpdate(
 // Count implements storage.Interface.
 func (c *Cacher) Count(pathPrefix string) (int64, error) {
 	return c.storage.Count(pathPrefix)
+}
+
+func (c *Cacher) GetLastRevision(ctx context.Context, key string) (string, error) {
+	return c.storage.GetLastRevision(ctx, key)
 }
 
 func (c *Cacher) triggerValues(event *watchCacheEvent) ([]string, bool) {
