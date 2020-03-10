@@ -37,6 +37,7 @@ import (
 	"k8s.io/apiserver/pkg/registry/generic"
 	"k8s.io/apiserver/pkg/storage"
 	"k8s.io/apiserver/pkg/storage/names"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	podutil "k8s.io/kubernetes/pkg/api/pod"
 	api "k8s.io/kubernetes/pkg/apis/core"
@@ -193,10 +194,25 @@ func MatchPod(label labels.Selector, field fields.Selector) storage.SelectionPre
 	}
 }
 
-func NodeNameTriggerFunc(obj runtime.Object) []storage.MatchValue {
-	pod := obj.(*api.Pod)
-	result := storage.MatchValue{IndexName: "spec.nodeName", Value: pod.Spec.NodeName}
-	return []storage.MatchValue{result}
+func NodeNameTriggerFunc(obj runtime.Object) string {
+	return obj.(*api.Pod).Spec.NodeName
+}
+
+// NodeNameIndexFunc return value spec.nodename of given object.
+func NodeNameIndexFunc(obj interface{}) ([]string, error) {
+	pod, ok := obj.(*api.Pod)
+	if !ok {
+		return nil, fmt.Errorf("not a pod")
+	}
+	return []string{pod.Spec.NodeName}, nil
+}
+
+// Indexers returns the indexers for pod storage.
+func Indexers() *cache.Indexers {
+	return &cache.Indexers{
+		storage.FieldIndex("spec.nodeName"): NodeNameIndexFunc,
+	}
+	return nil
 }
 
 // PodToSelectableFields returns a field set that represents the object

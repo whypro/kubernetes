@@ -46,6 +46,7 @@ import (
 	storeerr "k8s.io/apiserver/pkg/storage/errors"
 	"k8s.io/apiserver/pkg/storage/etcd/metrics"
 	"k8s.io/apiserver/pkg/util/dryrun"
+	"k8s.io/client-go/tools/cache"
 
 	"k8s.io/klog"
 )
@@ -1216,6 +1217,11 @@ func (e *Store) CompleteWithOptions(options *generic.StoreOptions) error {
 		}
 	}
 
+	err := validateIndexers(options.Indexers)
+	if err != nil {
+		return err
+	}
+
 	opts, err := options.RESTOptions.GetRESTOptions(e.DefaultQualifiedResource)
 	if err != nil {
 		return err
@@ -1264,11 +1270,6 @@ func (e *Store) CompleteWithOptions(options *generic.StoreOptions) error {
 		return e.KeyFunc(genericapirequest.NewContext(), accessor.GetName())
 	}
 
-	triggerFunc := options.TriggerFunc
-	if triggerFunc == nil {
-		triggerFunc = storage.NoTriggerPublisher
-	}
-
 	if e.DeleteCollectionWorkers == 0 {
 		e.DeleteCollectionWorkers = opts.DeleteCollectionWorkers
 	}
@@ -1287,15 +1288,20 @@ func (e *Store) CompleteWithOptions(options *generic.StoreOptions) error {
 
 	if e.Storage.Storage == nil {
 		e.Storage.Codec = opts.StorageConfig.Codec
-		e.Storage.Storage, e.DestroyFunc = opts.Decorator(
+		var err error
+		e.Storage.Storage, e.DestroyFunc, err = opts.Decorator(
 			opts.StorageConfig,
 			prefix,
 			keyFunc,
 			e.NewFunc,
 			e.NewListFunc,
 			attrFunc,
-			triggerFunc,
+			options.TriggerFunc,
+			options.Indexers,
 		)
+		if err != nil {
+			return err
+		}
 		e.StorageVersioner = opts.StorageConfig.EncodeVersioner
 
 		if opts.CountMetricPollPeriod > 0 {
@@ -1340,4 +1346,17 @@ func (e *Store) ConvertToTable(ctx context.Context, object runtime.Object, table
 
 func (e *Store) StorageVersion() runtime.GroupVersioner {
 	return e.StorageVersioner
+}
+
+// validateIndexers will check the prefix of indexers.
+func validateIndexers(indexers *cache.Indexers) error {
+	if indexers == nil {
+		return nil
+	}
+	for indexName := range *indexers {
+		if len(indexName) <= 2 || (indexName[:2] != "l:" && indexName[:2] != "f:") {
+			return fmt.Errorf("index must prefix with \"l:\" or \"f:\"")
+		}
+	}
+	return nil
 }
