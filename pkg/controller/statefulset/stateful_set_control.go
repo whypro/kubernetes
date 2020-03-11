@@ -510,13 +510,18 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 				set.Namespace,
 				set.Name,
 				replicas[target].Name)
-			err := ssc.podControl.DeleteStatefulPod(set, replicas[target])
+			if err := ssc.podControl.DeleteStatefulPod(set, replicas[target]); err != nil {
+				return &status, err
+			}
 			status.CurrentReplicas--
-			return &status, err
+			if monotonic {
+				return &status, nil
+			}
+			continue
 		}
 
 		// wait for unhealthy Pods on update
-		if !isHealthy(replicas[target]) {
+		if !isHealthy(replicas[target]) && monotonic {
 			klog.V(4).Infof(
 				"StatefulSet %s/%s is waiting for Pod %s to update",
 				set.Namespace,
@@ -524,7 +529,6 @@ func (ssc *defaultStatefulSetControl) updateStatefulSet(
 				replicas[target].Name)
 			return &status, nil
 		}
-
 	}
 	return &status, nil
 }
