@@ -15,7 +15,7 @@ stages:
 
 run-verify:
   stage: verify
-  image: harbor-htj.srv.yiran.com/k8s/kube-cross:v1.12.12-1
+  image: harbor-htj.srv.yiran.com/pdd-image/kube/kube-cross:v1.12.5-1 
   tags:
     - gcc
   script:
@@ -24,7 +24,7 @@ run-verify:
 
 run-unit-test:
   stage: test
-  image: harbor-htj.srv.yiran.com/k8s/kube-cross:v1.12.12-1
+  image: harbor-htj.srv.yiran.com/pdd-image/kube/kube-cross:v1.12.5-1
   tags:
     - gcc
   script:
@@ -33,7 +33,7 @@ run-unit-test:
 
 build-binaries:
   stage: build
-  image: harbor-htj.srv.yiran.com/k8s/kube-cross:v1.12.12-1
+  image: harbor-htj.srv.yiran.com/pdd-image/kube/kube-cross:v1.12.5-1
   tags:
     - golang
   script:
