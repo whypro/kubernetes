@@ -173,6 +173,8 @@ const (
 	NFSProvisioner
 	// Nginx image
 	Nginx
+	// NginxSameHash image
+	NginxSameHash
 	// NginxNew image
 	NginxNew
 	// NodePerfNpbEp image
@@ -239,6 +241,7 @@ func initImageConfigs() (map[int]Config, map[int]Config) {
 	configs[Nautilus] = Config{promoterE2eRegistry, "nautilus", "1.4"}
 	configs[NFSProvisioner] = Config{sigStorageRegistry, "nfs-provisioner", "v2.2.2"}
 	configs[Nginx] = Config{promoterE2eRegistry, "nginx", "1.14-1"}
+	configs[NginxSameHash] = Config{promoterE2eRegistry, "nginx", "1.14-2"}
 	configs[NginxNew] = Config{promoterE2eRegistry, "nginx", "1.15-1"}
 	configs[NodePerfNpbEp] = Config{promoterE2eRegistry, "node-perf/npb-ep", "1.1"}
 	configs[NodePerfNpbIs] = Config{promoterE2eRegistry, "node-perf/npb-is", "1.1"}
